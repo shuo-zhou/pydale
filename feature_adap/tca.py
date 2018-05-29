@@ -77,15 +77,19 @@ class TCA:
         #obj = np.trace(np.dot(K,L))
 
         H = np.eye(n) - 1. / n * np.ones((n, n))
-        obj = np.dot(np.dot(K, L), K) + self.lambda_ * np.eye(ns + nt)
+        
+        obj = np.dot(np.dot(K, L), K.T) + self.lambda_ * np.eye(ns + nt)
         st = np.dot(np.dot(K, H), K.T)
         eig_values, eig_vecs = scipy.linalg.eig(obj, st)
         
-        idx_sorted = eig_values.argsort()[::-1]
-        W = eig_vecs[:, idx_sorted]
-        W = W.reshape((W.shape[0], W.shape[1]))
+        ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
+        idx_sorted = np.argsort(ev_abs)[:self.n_components]
+
+        W = np.zeros((eig_vecs.shape[0], self.n_components))
+        
+        W[:,:] = eig_vecs[:, idx_sorted]
         W = np.asarray(W, dtype = np.float)
-        self.components_ = np.dot(X.T, W[:, :self.n_components])
+        self.components_ = np.dot(X.T, W)
         self.components_ = self.components_.T      
         
     def transform(self, X):

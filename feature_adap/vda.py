@@ -7,13 +7,12 @@ import scipy.linalg
 from sklearn.metrics.pairwise import kernel_metrics
 from sklearn.preprocessing import StandardScaler
 # =============================================================================
-# Joint Distribution Adaptation: JDA
-# Ref: Mingsheng Long, Jianmin Wang, Guiguang Ding, Jiaguang Sun, Philip S. Yu,
-# Transfer Feature Learning with Joint Distribution Adaptation, IEEE 
-# International Conference on Computer Vision (ICCV), 2013.
+# Visual Domain Adaptation: VDA
+# Tahmoresnezhad, J. and Hashemi, S., 2017. Visual domain adaptation via transfer 
+# feature learning. Knowledge and Information Systems, 50(2), pp.585-605.
 # =============================================================================
 
-class JDA:
+class VDA:
     def __init__(self, n_components, kernel_type='linear', lambda_=1, **kwargs):
         '''
         Init function
@@ -78,7 +77,7 @@ class JDA:
         if class_all.all() != np.unique(yt).all():
             sys.exit('Source and target domain should have the same labels')
         C = len(class_all)
-    
+        y = np.hstack((ys, yt))
         # Construct MMD kernel weight matrix
         L = self.get_L(ns, nt) * C
     
@@ -95,17 +94,27 @@ class JDA:
         else:
             sys.exit('Target domain data and label should have the same size!')
     
-        divider = np.sqrt(np.sum(np.diag(np.dot(L.T, L))))
-        L = L / divider
+#        divider = np.sqrt(np.sum(np.diag(np.dot(L.T, L))))
+#        L = L / divider
         
         # Construct kernel matrix
         K = self.get_kernel(X, None)
+    
+        # Construct within class scatter matrix
+        mean = {}
+        for c in class_all:
+            mean[c] = np.mean(K[np.where(y == c), :])
+        
+        Sw = np.zeros((n, n))
+        for i in range(K.shape[0]):
+            diff = K[i] - mean[y[i]]
+            Sw = np.add(np.dot(diff.T, diff), Sw)
     
         # Construct centering matrix
         H = np.eye(n) - 1.0 / (n * np.ones([n, n]))
         
         # objective for optimization
-        obj = np.dot(np.dot(K, L), K.T) + self.lambda_ * np.eye(n)
+        obj = np.dot(np.dot(K, L), K.T) + self.lambda_ * np.eye(n) + Sw
         # constraint subject to
         st = np.dot(np.dot(K, H), K.T)
         eig_values, eig_vecs = scipy.linalg.eig(obj, st)
@@ -129,7 +138,7 @@ class JDA:
         Return: 
             tranformed data
         '''
-#        X = self.scaler.transform(X)
+        #X = self.scaler.transform(X)
         return np.dot(X, self.components_.T)
     
     def fit_transform(self, Xs, Xt, ys, yt):
