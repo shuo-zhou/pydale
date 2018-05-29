@@ -43,7 +43,7 @@ class CDSVM(object):
         q_ = np.zeros((n_support,1))
         for row in range(n_support):
             q_[row,0] = self.C * self.sigma(self.support_vectors[row,:],X)
-        q[(n_features + n_samples):, 0] = q_
+        q[(n_features + n_samples):, 0] = q_[:, 0]
         
         
         # create the Matrix of SVM contraints
