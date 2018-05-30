@@ -36,6 +36,17 @@ def evaluate(pred, y):
     else:
         print (accuracy_score(y, pred_))
 
+def get_mmd(P, Q):
+    n1 = P.shape[0]
+    n2 = Q.shape[0]
+    #n = n1 + n2
+    X = np.vstack((P, Q))
+    K = np.dot(X, X.T)
+    a = 1.0 / (n1 * np.ones((n1, 1)))
+    b = -1.0 / (n2 * np.ones((n2, 1)))
+    e = np.vstack((a, b))
+    L = np.dot(e, e.T)
+    return np.trace(np.dot(K, L))
 
 random_state = 10
 
@@ -45,11 +56,31 @@ y_all = np.hstack((ys, yt))
 #ys = rev_label(ys)
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
-ax.scatter(Xs[:, 0], Xs[:, 1], Xs[:, 2], marker='o', c=ys, label = 'source')
-ax.scatter(Xt[:, 0], Xt[:, 1], Xt[:, 2], marker='+', c=yt, label = 'target')
+#ax.scatter(Xs[:, 0], Xs[:, 1], Xs[:, 2], marker='o', c=ys, label = 'source')
+#ax.scatter(Xt[:, 0], Xt[:, 1], Xt[:, 2], marker='+', c=yt, label = 'target')
+
+ax.scatter(Xs[np.where(ys==np.unique(ys)[1])][:, 0], Xs[np.where(ys==
+                 np.unique(ys)[1])][:, 1], Xs[np.where(ys==
+                 np.unique(ys)[1])][:, 2], marker='+', c='b', #edgecolors = 'b',
+            label = 'source pos')
+ax.scatter(Xs[np.where(ys==np.unique(ys)[0])][:, 0], Xs[np.where(ys==
+                 np.unique(ys)[0])][:, 1], Xs[np.where(ys==
+                 np.unique(ys)[0])][:, 2], marker='o', c='w', edgecolors = 'b',
+            label = 'source neg')
+ax.scatter(Xt[np.where(yt==np.unique(ys)[1])][:, 0], Xt[np.where(yt==
+                 np.unique(ys)[1])][:, 1], Xt[np.where(yt==
+                 np.unique(ys)[1])][:, 1], marker='+', c='r', label = 'target pos')   
+ax.scatter(Xt[np.where(yt==np.unique(ys)[0])][:, 0], Xt[np.where(yt==
+                 np.unique(ys)[0])][:, 1], Xt[np.where(yt==
+                 np.unique(ys)[0])][:, 1], marker='o', c='w', edgecolors = 'r',
+            label = 'target neg')
+
 plt.legend()
 plt.savefig("data.eps",format="eps")
 plt.show()
+
+print(get_mmd(Xs, Xt))
+
 # 2D
 #plt.scatter(Xs[:, 0], Xs[:, 1], marker='o', c=ys, label = 'source')
 #plt.scatter(Xt[:, 0], Xt[:, 1], marker='+', c=yt, label = 'target')
@@ -63,14 +94,27 @@ pca = PCA(n_components = 2)
 pca.fit(np.vstack((Xs, Xt)))
 Xs_pc = pca.transform(Xs)
 Xt_pc = pca.transform(Xt)
-plt.scatter(Xs_pc[:, 0], Xs_pc[:, 1], marker='o', c=ys, label = 'source')
-plt.scatter(Xt_pc[:, 0], Xt_pc[:, 1], marker='+', c=yt, label = 'target')
+#plt.scatter(Xs_pc[:, 0], Xs_pc[:, 1], marker='o', c=ys, label = 'source')
+#plt.scatter(Xt_pc[:, 0], Xt_pc[:, 1], marker='+', c=yt, label = 'target')
+plt.scatter(Xs_pc[np.where(ys==np.unique(ys)[1])][:, 0], Xs_pc[np.where(ys==
+                 np.unique(ys)[1])][:, 1], marker='+', c='b', #edgecolors = 'b',
+            label = 'source pos')
+plt.scatter(Xs_pc[np.where(ys==np.unique(ys)[0])][:, 0], Xs_pc[np.where(ys==
+                 np.unique(ys)[0])][:, 1], marker='o', c='w', edgecolors = 'b',
+            label = 'source neg')
+plt.scatter(Xt_pc[np.where(yt==np.unique(ys)[1])][:, 0], Xt_pc[np.where(yt==
+                 np.unique(ys)[1])][:, 1], marker='+', c='r', label = 'target pos')   
+plt.scatter(Xt_pc[np.where(yt==np.unique(ys)[0])][:, 0], Xt_pc[np.where(yt==
+                 np.unique(ys)[0])][:, 1], marker='o', c='w', edgecolors = 'r',
+            label = 'target neg')
 #sns.distplot(Xs_pc)
 #sns.distplot(Xt_pc)
 
 plt.legend()
 plt.savefig("pca.eps", format = "eps")
 plt.show()
+
+print(get_mmd(Xs_pc, Xt_pc))
 
 #
 ns = Xs.shape[0]
@@ -81,8 +125,19 @@ my_tca = TCA(2, kernel_type='linear', lambda_ = 10)
 #my_tca = TCA(dim=1, kerneltype='linear', mu = 0.1)
 Xtcs, Xtct = my_tca.fit_transform(Xs, Xt)
 
-plt.scatter(Xtcs[:, 0], Xtcs[:, 1], marker='o', c=ys, label = 'source')
-plt.scatter(Xtct[:, 0], Xtct[:, 1], marker='+', c=yt, label = 'target')
+#plt.scatter(Xtcs[:, 0], Xtcs[:, 1], marker='o', c=ys, label = 'source')
+#plt.scatter(Xtct[:, 0], Xtct[:, 1], marker='+', c=yt, label = 'target')
+plt.scatter(Xtcs[np.where(ys==np.unique(ys)[1])][:, 0], Xtcs[np.where(ys==
+                 np.unique(ys)[1])][:, 1], marker='+', c='b', #edgecolors = 'b',
+            label = 'source pos')
+plt.scatter(Xtcs[np.where(ys==np.unique(ys)[0])][:, 0], Xtcs[np.where(ys==
+                 np.unique(ys)[0])][:, 1], marker='o', c='w', edgecolors = 'b',
+            label = 'source neg')
+plt.scatter(Xtct[np.where(yt==np.unique(ys)[1])][:, 0], Xtct[np.where(yt==
+                 np.unique(ys)[1])][:, 1], marker='+', c='r', label = 'target pos')   
+plt.scatter(Xtct[np.where(yt==np.unique(ys)[0])][:, 0], Xtct[np.where(yt==
+                 np.unique(ys)[0])][:, 1], marker='o', c='w', edgecolors = 'r',
+            label = 'target neg')
 #sns.distplot(Xtcs)
 #sns.distplot(Xtct)
 
@@ -97,12 +152,24 @@ evaluate(y_pred, y_all)
 clf.fit(Xtcs, ys)
 print(accuracy_score(yt, clf.predict(Xtct)))
 
+print(get_mmd(Xtcs, Xtct))
 
 my_jda = JDA(2, kernel_type='linear', lambda_ = 1)
 ZZs, ZZt = my_jda.fit_transform(Xs, Xt, ys, yt)
 
-plt.scatter(ZZs[:, 0], ZZs[:, 1], marker='o', c=ys, label = 'source')
-plt.scatter(ZZt[:, 0], ZZt[:, 1], marker='+', c=yt, label = 'target')
+#plt.scatter(ZZs[:, 0], ZZs[:, 1], marker='o', c=ys, label = 'source')
+#plt.scatter(ZZt[:, 0], ZZt[:, 1], marker='+', c=yt, label = 'target')
+plt.scatter(ZZs[np.where(ys==np.unique(ys)[1])][:, 0], ZZs[np.where(ys==
+                 np.unique(ys)[1])][:, 1], marker='+', c='b', #edgecolors = 'b',
+            label = 'source pos')
+plt.scatter(ZZs[np.where(ys==np.unique(ys)[0])][:, 0], ZZs[np.where(ys==
+                 np.unique(ys)[0])][:, 1], marker='o', c='w', edgecolors = 'b',
+            label = 'source neg')
+plt.scatter(ZZt[np.where(yt==np.unique(ys)[1])][:, 0], ZZt[np.where(yt==
+                 np.unique(ys)[1])][:, 1], marker='+', c='r', label = 'target pos')   
+plt.scatter(ZZt[np.where(yt==np.unique(ys)[0])][:, 0], ZZt[np.where(yt==
+                 np.unique(ys)[0])][:, 1], marker='o', c='w', edgecolors = 'r',
+            label = 'target neg')
 
 #sns.distplot(ZZs)
 #sns.distplot(ZZt)
@@ -120,33 +187,33 @@ print(accuracy_score(yt, clf.predict(ZZt)))
 
 #ns = Xs.shape[0]
 #nt = Xt.shape[0]
-my_vda = VDA(2, kernel_type='linear', lambda_ = 1)
-Zs, Zt = my_vda.fit_transform(Xs, Xt, ys, yt)
-plt.scatter(Zs[:, 0], Zs[:, 1], marker='o', c=ys, label = 'source')
-plt.scatter(Zt[:, 0], Zt[:, 1], marker='+', c=yt, label = 'target')
-plt.legend()
-plt.savefig("vda.eps", format="eps")
-plt.show()
-
-y_pred = KMeans(n_clusters=2,
-                random_state=random_state).fit_predict(np.vstack((Zs, Zt)))
-evaluate(y_pred, y_all)
-clf.fit(Zs, ys)
-print(accuracy_score(yt, clf.predict(Zt)))
-
-my_jtda = JTDA(2, kernel_type='linear', lambda_ = 1)
-Zs, Zt = my_jtda.fit_transform(Xs, Xt, ys, yt)
-plt.scatter(Zs[:, 0], Zs[:, 1], marker='o', c=ys, label = 'source')
-plt.scatter(Zt[:, 0], Zt[:, 1], marker='+', c=yt, label = 'target')
-plt.legend()
-plt.savefig("jtda.eps", format="eps")
-plt.show()
-
-y_pred = KMeans(n_clusters=2,
-                random_state=random_state).fit_predict(np.vstack((Zs, Zt)))
-evaluate(y_pred, y_all)
-clf.fit(Zs, ys)
-print(accuracy_score(yt, clf.predict(Zt)))
+#my_vda = VDA(2, kernel_type='linear', lambda_ = 1)
+#Zs, Zt = my_vda.fit_transform(Xs, Xt, ys, yt)
+#plt.scatter(Zs[:, 0], Zs[:, 1], marker='o', c=ys, label = 'source')
+#plt.scatter(Zt[:, 0], Zt[:, 1], marker='+', c=yt, label = 'target')
+#plt.legend()
+#plt.savefig("vda.eps", format="eps")
+#plt.show()
+#
+#y_pred = KMeans(n_clusters=2,
+#                random_state=random_state).fit_predict(np.vstack((Zs, Zt)))
+#evaluate(y_pred, y_all)
+#clf.fit(Zs, ys)
+#print(accuracy_score(yt, clf.predict(Zt)))
+#
+#my_jtda = JTDA(2, kernel_type='linear', lambda_ = 1)
+#Zs, Zt = my_jtda.fit_transform(Xs, Xt, ys, yt)
+#plt.scatter(Zs[:, 0], Zs[:, 1], marker='o', c=ys, label = 'source')
+#plt.scatter(Zt[:, 0], Zt[:, 1], marker='+', c=yt, label = 'target')
+#plt.legend()
+#plt.savefig("jtda.eps", format="eps")
+#plt.show()
+#
+#y_pred = KMeans(n_clusters=2,
+#                random_state=random_state).fit_predict(np.vstack((Zs, Zt)))
+#evaluate(y_pred, y_all)
+#clf.fit(Zs, ys)
+#print(accuracy_score(yt, clf.predict(Zt)))
 #
 #y_pred = KMeans(n_clusters=2,
 #                random_state=random_state).fit_predict(np.vstack((Zs, Zt)))
@@ -186,24 +253,46 @@ svm =  SVC(kernel='linear')
 svm.fit(np.vstack((Xtcs, Xtct)), np.hstack((ys, yt)))
 
 # get the separating hyperplane
-w = src_clf.coef_[0]
+#w = src_clf.coef_[0]
+#xx = np.linspace(0, 28)
+w = svm.coef_[0]
+xx = np.linspace(-30, 50)
 a = -w[0] / w[1]
-xx = np.linspace(0, 28)
 yy = a * xx - (clf.intercept_[0]) / w[1]
 
-plt.scatter(Xtcs[:, 0], Xtcs[:, 1], marker='o', c=ys, label = 'source')
-plt.scatter(Xtct[:, 0], Xtct[:, 1], marker='+', c=yt, label = 'target')
+plt.scatter(Xtcs[np.where(ys==np.unique(ys)[1])][:, 0], Xtcs[np.where(ys==
+                 np.unique(ys)[1])][:, 1], marker='+', c='b', #edgecolors = 'b',
+            label = 'source pos')
+plt.scatter(Xtcs[np.where(ys==np.unique(ys)[0])][:, 0], Xtcs[np.where(ys==
+                 np.unique(ys)[0])][:, 1], marker='o', c='w', edgecolors = 'b',
+            label = 'source neg')
+plt.scatter(Xtct[np.where(yt==np.unique(ys)[1])][:, 0], Xtct[np.where(yt==
+                 np.unique(ys)[1])][:, 1], marker='+', c='r', label = 'target pos')   
+plt.scatter(Xtct[np.where(yt==np.unique(ys)[0])][:, 0], Xtct[np.where(yt==
+                 np.unique(ys)[0])][:, 1], marker='o', c='w', edgecolors = 'r',
+            label = 'target neg')
+
 plt.plot(xx, yy, 'k-')
 plt.legend()
 plt.show()
 
 w = cdsvm.coef_[0]
 a = -w[0] / w[1]
-xx = np.linspace(-50, 70)
+xx = np.linspace(-45, 70)
 yy = a * xx - (clf.intercept_[0]) / w[1]
 
-plt.scatter(Xtcs[:, 0], Xtcs[:, 1], marker='o', c=ys, label = 'source')
-plt.scatter(Xtct[:, 0], Xtct[:, 1], marker='+', c=yt, label = 'target')
+plt.scatter(Xtcs[np.where(ys==np.unique(ys)[1])][:, 0], Xtcs[np.where(ys==
+                 np.unique(ys)[1])][:, 1], marker='+', c='b', #edgecolors = 'b',
+            label = 'source pos')
+plt.scatter(Xtcs[np.where(ys==np.unique(ys)[0])][:, 0], Xtcs[np.where(ys==
+                 np.unique(ys)[0])][:, 1], marker='o', c='w', edgecolors = 'b',
+            label = 'source neg')
+plt.scatter(Xtct[np.where(yt==np.unique(ys)[1])][:, 0], Xtct[np.where(yt==
+                 np.unique(ys)[1])][:, 1], marker='+', c='r', label = 'target pos')   
+plt.scatter(Xtct[np.where(yt==np.unique(ys)[0])][:, 0], Xtct[np.where(yt==
+                 np.unique(ys)[0])][:, 1], marker='o', c='w', edgecolors = 'r',
+            label = 'target neg')
+
 plt.plot(xx, yy, 'k-')
 plt.legend()
 plt.show()
