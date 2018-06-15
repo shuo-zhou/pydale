@@ -13,7 +13,7 @@ import toydata
 from feature_adaptation.jda import JDA
 from feature_adaptation.vda import VDA
 from feature_adaptation.tca import TCA
-#from feature_adap.da_tool.tca import TCA
+
 from jtda import JTDA
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.decomposition import PCA
@@ -121,7 +121,7 @@ ns = Xs.shape[0]
 nt = Xt.shape[0]
 
 #TCA
-my_tca = TCA(2, kernel_type='linear', lambda_ = 10)
+my_tca = TCA(2, kernel='linear', lambda_ = 10)
 #my_tca = TCA(dim=1, kerneltype='linear', mu = 0.1)
 Xtcs, Xtct = my_tca.fit_transform(Xs, Xt)
 
