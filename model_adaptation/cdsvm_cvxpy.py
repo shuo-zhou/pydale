@@ -14,7 +14,7 @@ Ref: Jiang, W., Zavesky, E., Chang, S.-F., and Loui, A. Cross-domain learning me
 import numpy as np
 #from cvxopt import matrix, solvers
 from sklearn.metrics import accuracy_score
-import cvxpy as cvx
+import cvxpy as cp
 from scipy import sparse
 
 class CDSVM(object):
@@ -55,25 +55,25 @@ class CDSVM(object):
         # create the Matrix of SVM contraints
         G = sparse.lil_matrix((n_samples*2,paramCount))
         G[:n_samples,:n_features] = -np.multiply(X, y)
-        G[:, n_features: (n_features+n_samples)] = - np.vstack((sparse.eye(n_samples), 
+        G[:, n_features: (n_features+n_samples)] = - sparse.vstack((sparse.eye(n_samples), 
                 sparse.eye(n_samples)))
         G_ = sparse.lil_matrix((n_support*2,paramCount))
         G_[:n_support, :n_features] = -np.multiply(
                 self.support_vectors, self.support_vector_labels)
-        G_[:, (n_features+n_samples):] = - np.vstack((sparse.eye(n_support), 
+        G_[:, (n_features+n_samples):] = - sparse.vstack((sparse.eye(n_support), 
                 sparse.eye(n_support)))
         G = sparse.vstack([G,G_])
             
         #create vector of h
-        h = sparse.lil_matrix(((n_samples+n_support) * 2, 1))
-        h[:n_samples, 0] = -1
+        h = sparse.lil_matrix(((n_samples+n_support) * 2,1))
+        h[:n_samples] = -1
         h[(n_samples*2):(n_samples*2+n_support)] = -1
         
         # construct quadprog problem
-        x = cvx.Variable(paramCount)
-        objective = cvx.Minimize(cvx.atom.quad_form(x, P) + q.transpose * x)
-        constraints = [G*x <= h]
-        prob = cvx.Problem(objective, constraints)
+        x = cp.Variable((paramCount,1))
+        objective = cp.Minimize(cp.quad_form(x, P) + q.transpose() * x)
+        constraints = [G * x <= h]
+        prob = cp.Problem(objective, constraints)
         prob.solve()
         # convert numpy matrix to cvxopt matrix
 #        P = 2*matrix(P)
@@ -86,7 +86,7 @@ class CDSVM(object):
         
 #        self.coef_ = sol['x'][0:n_features]
 #        self.coef_ = np.array(self.coef_).T
-        self.coef_ = x.value[:n_features]
+        self.coef_ = x.value[:n_features].reshape((1, n_features))
         
     def sigma(self,support_vector, X):
         n_samples = X.shape[0]
