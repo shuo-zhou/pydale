@@ -9,8 +9,8 @@ from sklearn.metrics.pairwise import kernel_metrics
 from sklearn.utils.validation import check_is_fitted
 # =============================================================================
 # Transfer Component Analysis: TCA
-# Ref: S. J. Pan, I. W. Tsang, J. T. Kwok and Q. Yang, "Domain Adaptation via 
-# Transfer Component Analysis," in IEEE Transactions on Neural Networks, 
+# Ref: S. J. Pan, I. W. Tsang, J. T. Kwok and Q. Yang, "Domain Adaptation via
+# Transfer Component Analysis," in IEEE Transactions on Neural Networks,
 # vol. 22, no. 2, pp. 199-210, Feb. 2011.
 # =============================================================================
 
@@ -35,7 +35,7 @@ class TCA:
         Parameters:
             ns: source domain sample size
             nt: target domain sample size
-        Return: 
+        Return:
             Kernel weight matrix L
         '''
         a = 1.0 / (ns * np.ones((ns, 1)))
@@ -50,7 +50,7 @@ class TCA:
         Parameters:
             X: X matrix (n1,d)
             Y: Y matrix (n2,d)
-        Return: 
+        Return:
             Kernel matrix K
         '''
         kernel_all = ['linear', 'rbf', 'poly']
@@ -58,7 +58,7 @@ class TCA:
             sys.exit('Invalid kernel type!')
         kernel_function = kernel_metrics()[self.kernel]
         return kernel_function(X, Y=Y, **self.kwargs)
-       
+
 
     def fit(self, Xs, Xt):
         '''
@@ -74,14 +74,21 @@ class TCA:
         L[np.isnan(L)] = 0
         K = self.get_kernel(X)
         K[np.isnan(K)] = 0
-        #obj = np.trace(np.dot(K,L))
+        #mmd = np.trace(np.dot(K,L))
 
+        #construct centring matrix
         H = np.eye(n) - 1. / n * np.ones((n, n))
-        
+
+        # objective to minimize
         obj = np.dot(np.dot(K, L), K.T) + self.lambda_ * np.eye(n)
+
+        # scatter matrix as constrain, to preserve variance
         st = np.dot(np.dot(K, H), K.T)
+
+        # compute the eigen values and eigen vectors, take the samllest n_components
+        # eigen vectors as solution
         eig_values, eig_vecs = scipy.linalg.eig(obj, st)
-        
+
         ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
         idx_sorted = np.argsort(ev_abs)[:self.n_components]
 
@@ -106,10 +113,9 @@ class TCA:
         check_is_fitted(self, 'Xs')
         check_is_fitted(self, 'Xt')
         X_fit = np.vstack(self.Xs, self.Xt)
-        K = self.get_kernel(X, X_fit)
-        X_transformed = np.dot(K, self.U)
+        K_ = self.get_kernel(X, X_fit)
+        X_transformed = np.dot(K_, self.U)
         return X_transformed
-
 
     def fit_transform(self, Xs, Xt):
         '''
