@@ -6,6 +6,7 @@ A python toolbox for transfer learning/domain adaptation methods
 - [scipy](https://www.scipy.org/)
 - [numpy](http://www.numpy.org/)
 - [cvxopt](http://cvxopt.org/)
+- [cvxpy](http://www.cvxpy.org/)
 
 ### References
 - [Transfer Feature Learning with Joint Distribution Adaptation (JDA)](http://openaccess.thecvf.com/content_iccv_2013/papers/Long_Transfer_Feature_Learning_2013_ICCV_paper.pdf) [Long et al.,](http://ise.thss.tsinghua.edu.cn/~mlong/) in ICCV, 2013. [[Matlab Code by Author]](http://ise.thss.tsinghua.edu.cn/~mlong/doc/joint-distribution-adaptation-iccv13.zip)
