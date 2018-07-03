@@ -2,10 +2,12 @@
 # author: Shuo Zhou, The University of Sheffield
 # =============================================================================
 import numpy as np
+import scipy.linalg
 import sys
-import scipy.linalg 
-from sklearn.metrics.pairwise import kernel_metrics
-from sklearn.preprocessing import StandardScaler
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.metrics.pairwise import pairwise_kernels
+from sklearn.utils.validation import check_is_fitted
+#from sklearn.preprocessing import StandardScaler
 # =============================================================================
 # Joint Distribution Adaptation: JDA
 # Ref: Mingsheng Long, Jianmin Wang, Guiguang Ding, Jiaguang Sun, Philip S. Yu,
@@ -13,19 +15,20 @@ from sklearn.preprocessing import StandardScaler
 # International Conference on Computer Vision (ICCV), 2013.
 # =============================================================================
 
-class JDA:
-    def __init__(self, n_components, kernel_type='linear', lambda_=1, **kwargs):
+class JDA(BaseEstimator, TransformerMixin):
+    def __init__(self, n_components, kernel = 'linear', lambda_=1, **kwargs):
         '''
         Init function
         Parameters
             n_components: n_componentss after tca (n_components <= d)
-            kernel_type: 'rbf' | 'linear' | 'poly' (default is 'linear')
+            kernel_type: [‘rbf’, ‘sigmoid’, ‘polynomial’, ‘poly’, ‘linear’, 
+            ‘cosine’] (default is 'linear')
             **kwargs: kernel param
             lambda_: regulization param
         '''
         self.n_components = n_components
         self.kwargs = kwargs
-        self.kernel_type = kernel_type
+        self.kernel = kernel
         self.lambda_ = lambda_
 
     def get_L(self, ns, nt):
@@ -50,13 +53,11 @@ class JDA:
             X: X matrix (n1,d)
             Y: Y matrix (n2,d)
         Return: 
-            Kernel matrix K
+            Kernel matrix
         '''
-        kernel_all = ['linear', 'rbf', 'poly']
-        if self.kernel_type not in kernel_all:
-            sys.exit('Invalid kernel type!')
-        kernel_function = kernel_metrics()[self.kernel_type]
-        return kernel_function(X, Y=Y, **self.kwargs)
+
+        return pairwise_kernels(X, Y=Y, metric = self.kernel, 
+                                filter_params = True, **self.kwargs)
 
     def fit(self, Xs, Xt, ys, yt):
         '''
@@ -113,13 +114,15 @@ class JDA:
         ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
         idx_sorted = np.argsort(ev_abs)[:self.n_components]
 
-        W = np.zeros((eig_vecs.shape[0], self.n_components))
-        
-        W[:,:] = eig_vecs[:, idx_sorted]
-        
-        W = np.asarray(W, dtype = np.float)
-        self.components_ = np.dot(X.T, W)
-        self.components_ = self.components_.T
+        U = np.zeros((eig_vecs.shape[0], self.n_components))
+
+        U[:,:] = eig_vecs[:, idx_sorted]
+        self.U = np.asarray(U, dtype = np.float)
+        self.K = K
+        self.Xs = Xs
+        self.Xt = Xt
+        self.nt = nt
+        self.ns = ns
         return self
     
     def transform(self, X):
@@ -130,7 +133,12 @@ class JDA:
             tranformed data
         '''
 #        X = self.scaler.transform(X)
-        return np.dot(X, self.components_.T)
+        check_is_fitted(self, 'Xs')
+        check_is_fitted(self, 'Xt')
+        X_fit = np.vstack(self.Xs, self.Xt)
+        K = self.get_kernel(X, X_fit)
+        X_transformed = np.dot(K, self.U)
+        return X_transformed
     
     def fit_transform(self, Xs, Xt, ys, yt):
         '''
@@ -143,8 +151,7 @@ class JDA:
             tranformed Xs_transformed, Xt_transformed
         '''
         self.fit(Xs, Xt, ys, yt)
-        
-        Xs_transformed = self.transform(Xs)
-        Xt_transformed = self.transform(Xt)
-        
+        K_ = np.dot(self.K, self.U)
+        Xs_transformed = K_[:self.ns, :]
+        Xt_transformed = K_[self.ns:, :]
         return Xs_transformed, Xt_transformed

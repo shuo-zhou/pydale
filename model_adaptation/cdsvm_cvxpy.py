@@ -35,22 +35,12 @@ class CDSVM(object):
         paramCount = n_support + n_samples + n_features
         
         #create matrix P
-        
-#        P = np.zeros((paramCount,paramCount))
-#        P[:n_features, :n_features] = np.eye(n_features)
-                
         P = sparse.lil_matrix((paramCount,paramCount))
         P[:n_features, :n_features] = sparse.eye(n_features)
+        
         # create vector q
-#        q = np.zeros((paramCount, 1))
-#        q[n_features: (n_features + n_samples), 0] = self.C * 1
-#        q_ = np.zeros((n_support,1))
-#        for row in range(n_support):
-#            q_[row,0] = self.C * self.sigma(self.support_vectors[row,:],X)
-#        q[(n_features + n_samples):, 0] = q_[:, 0]
         q = sparse.lil_matrix((paramCount, 1))
         q[n_features: (n_features + n_samples), 0] = self.C * 1
-        
         
         # create the Matrix of SVM contraints
         G = sparse.lil_matrix((n_samples*2,paramCount))
@@ -75,17 +65,7 @@ class CDSVM(object):
         constraints = [G * x <= h]
         prob = cp.Problem(objective, constraints)
         prob.solve()
-        # convert numpy matrix to cvxopt matrix
-#        P = 2*matrix(P)
-#        q = matrix(q)
-#        G = matrix(G)
-#        h = matrix(h)
-        
-#        solvers.options['show_progress'] = False
-#        sol = solvers.qp(P,q,G,h)
-        
-#        self.coef_ = sol['x'][0:n_features]
-#        self.coef_ = np.array(self.coef_).T
+
         self.coef_ = x.value[:n_features].reshape((1, n_features))
         
     def sigma(self,support_vector, X):
@@ -103,8 +83,7 @@ class CDSVM(object):
         
     def decision_function(self,X):
         decision = np.dot(X,self.coef_.T)
-        #print 'src:',np.dot(X,self.source_w.T)
-        #print 'adaptive:',np.dot(X,self.source_w.T)+np.dot(X,self.coef_)
+
         return decision[:,0]
     
     def score(self,X,y):

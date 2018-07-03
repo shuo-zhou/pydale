@@ -4,15 +4,16 @@
 import numpy as np
 import sys
 import scipy.linalg 
-from sklearn.metrics.pairwise import kernel_metrics
-from sklearn.preprocessing import StandardScaler
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.metrics.pairwise import pairwise_kernels
+from sklearn.utils.validation import check_is_fitted
 # =============================================================================
 # Visual Domain Adaptation: VDA
 # Tahmoresnezhad, J. and Hashemi, S., 2017. Visual domain adaptation via transfer 
 # feature learning. Knowledge and Information Systems, 50(2), pp.585-605.
 # =============================================================================
 
-class VDA:
+class VDA(BaseEstimator, TransformerMixin):
     def __init__(self, n_components, kernel_type='linear', lambda_=1, **kwargs):
         '''
         Init function
@@ -51,11 +52,9 @@ class VDA:
         Return: 
             Kernel matrix K
         '''
-        kernel_all = ['linear', 'rbf', 'poly']
-        if self.kernel_type not in kernel_all:
-            sys.exit('Invalid kernel type!')
-        kernel_function = kernel_metrics()[self.kernel_type]
-        return kernel_function(X, Y=Y, **self.kwargs)
+
+        return pairwise_kernels(X, Y=Y, metric = self.kernel, 
+                                filter_params = True, **self.kwargs)
 
     def fit(self, Xs, Xt, ys, yt):
         '''
@@ -93,10 +92,7 @@ class VDA:
                 L = L + np.dot(e, e.T)
         else:
             sys.exit('Target domain data and label should have the same size!')
-    
-#        divider = np.sqrt(np.sum(np.diag(np.dot(L.T, L))))
-#        L = L / divider
-        
+            
         # Construct kernel matrix
         K = self.get_kernel(X, None)
     
@@ -122,13 +118,15 @@ class VDA:
         ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
         idx_sorted = np.argsort(ev_abs)[:self.n_components]
 
-        W = np.zeros((eig_vecs.shape[0], self.n_components))
-        
-        W[:,:] = eig_vecs[:, idx_sorted]
-        
-        W = np.asarray(W, dtype = np.float)
-        self.components_ = np.dot(X.T, W)
-        self.components_ = self.components_.T
+        U = np.zeros((eig_vecs.shape[0], self.n_components))
+
+        U[:,:] = eig_vecs[:, idx_sorted]
+        self.U = np.asarray(U, dtype = np.float)
+        self.K = K
+        self.Xs = Xs
+        self.Xt = Xt
+        self.nt = nt
+        self.ns = ns
         return self
     
     def transform(self, X):
@@ -139,7 +137,12 @@ class VDA:
             tranformed data
         '''
         #X = self.scaler.transform(X)
-        return np.dot(X, self.components_.T)
+        check_is_fitted(self, 'Xs')
+        check_is_fitted(self, 'Xt')
+        X_fit = np.vstack(self.Xs, self.Xt)
+        K = self.get_kernel(X, X_fit)
+        X_transformed = np.dot(K, self.U)
+        return X_transformed
     
     def fit_transform(self, Xs, Xt, ys, yt):
         '''
@@ -152,8 +155,7 @@ class VDA:
             tranformed Xs_transformed, Xt_transformed
         '''
         self.fit(Xs, Xt, ys, yt)
-        
-        Xs_transformed = self.transform(Xs)
-        Xt_transformed = self.transform(Xt)
-        
+        K_ = np.dot(self.K, self.U)
+        Xs_transformed = K_[:self.ns, :]
+        Xt_transformed = K_[self.ns:, :]
         return Xs_transformed, Xt_transformed

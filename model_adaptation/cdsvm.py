@@ -69,10 +69,7 @@ class CDSVM(object):
         q = matrix(q)
         G = matrix(G)
         h = matrix(h)
-        #print Q
-        #print p
-        #print G
-        #print h
+
         solvers.options['show_progress'] = False
         sol = solvers.qp(P,q,G,h)
         
@@ -95,8 +92,7 @@ class CDSVM(object):
         
     def decision_function(self,X):
         decision = np.dot(X,self.coef_.T)
-        #print 'src:',np.dot(X,self.source_w.T)
-        #print 'adaptive:',np.dot(X,self.source_w.T)+np.dot(X,self.coef_)
+
         return decision[:,0]
     
     def score(self,X,y):
