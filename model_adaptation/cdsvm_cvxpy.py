@@ -14,10 +14,11 @@ Ref: Jiang, W., Zavesky, E., Chang, S.-F., and Loui, A. Cross-domain learning me
 import numpy as np
 #from cvxopt import matrix, solvers
 from sklearn.metrics import accuracy_score
+from sklearn.base import BaseEstimator
 import cvxpy as cp
 from scipy import sparse
 
-class CDSVM(object):
+class CDSVM(BaseEstimator):
     def __init__(self,support_vectors, support_vector_labels,C=0.1, beta=0.5):
         self.C = C
         self.beta = beta
@@ -91,5 +92,6 @@ class CDSVM(object):
         return accuracy_score(pred,y)
     
     def get_params(self,deep=True):
-        out = '(C='+str(self.C)+', beta='+str(self.beta)+')'
+        out = {'support_vectors':self.support_vectors, 'support_vector_labels':
+            self.support_vector_labels, 'C': self.C, 'beta': self.beta}
         return out
