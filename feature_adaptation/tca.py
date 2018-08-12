@@ -78,18 +78,19 @@ class TCA(BaseEstimator, TransformerMixin):
         
         obj = np.dot(np.dot(K, L), K.T) + self.lambda_ * np.eye(n)
         st = np.dot(np.dot(K, H), K.T)
-        eig_values, eig_vecs = scipy.linalg.eig(obj, st)
+        eig_vals, eig_vecs = scipy.linalg.eig(obj, st)
         
-        ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
-        idx_sorted = np.argsort(ev_abs)[:self.n_components]
+#        ev_abs = np.array(list(map(lambda item: np.abs(item), eig_vals)))
+#        idx_sorted = np.argsort(ev_abs)
+        idx_sorted = eig_vals.argsort()
 
-        U = np.zeros((eig_vecs.shape[0], self.n_components))
-
-        U[:,:] = eig_vecs[:, idx_sorted]
-        self.U = np.asarray(U, dtype = np.float)
+       
+        self.eig_vals = eig_vals[idx_sorted]
+        self.U = eig_vecs[:, idx_sorted]
+        self.U = np.asarray(self.U, dtype = np.float)
 #        self.components_ = np.dot(X.T, U)
 #        self.components_ = self.components_.T
-        self.K = K
+
         self.Xs = Xs
         self.Xt = Xt
         return self
@@ -103,9 +104,10 @@ class TCA(BaseEstimator, TransformerMixin):
         '''
         check_is_fitted(self, 'Xs')
         check_is_fitted(self, 'Xt')
-        X_fit = np.vstack(self.Xs, self.Xt)
+        X_fit = np.vstack((self.Xs, self.Xt))
         K = self.get_kernel(X, X_fit)
-        X_transformed = np.dot(K, self.U)
+        U_ = self.U[:,:self.n_components]
+        X_transformed = np.dot(K, U_)
         return X_transformed
 
 
@@ -118,7 +120,7 @@ class TCA(BaseEstimator, TransformerMixin):
             tranformed Xs_transformed, Xt_transformed
         '''
         self.fit(Xs, Xt)
-        K_ = np.dot(self.K, self.U)
-        Xs_transformed = K_[:self.ns, :]
-        Xt_transformed = K_[self.ns:, :]
+        Xs_transformed = self.transform(Xs)
+        Xt_transformed = self.transform(Xt)
         return Xs_transformed, Xt_transformed
+    
