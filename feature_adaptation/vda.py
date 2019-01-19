@@ -3,7 +3,7 @@
 # =============================================================================
 import numpy as np
 import sys
-import scipy.linalg 
+from scipy.linalg import eig
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.utils.validation import check_is_fitted
@@ -69,9 +69,9 @@ class VDA(BaseEstimator, TransformerMixin):
 #        self.scaler.fit(X)
 #        X = self.scaler.transform(X)
         #X = np.dot(X.T, np.diag(1.0 / np.sqrt(np.sum(np.square(X), axis = 1)))).T 
-        n, m = X.shape
         ns = Xs.shape[0]
         nt = Xt.shape[0]
+        n = ns + nt
         class_all = np.unique(ys)
         if class_all.all() != np.unique(yt).all():
             sys.exit('Source and target domain should have the same labels')
@@ -113,7 +113,7 @@ class VDA(BaseEstimator, TransformerMixin):
         obj = np.dot(np.dot(K, L), K.T) + self.lambda_ * np.eye(n) + Sw
         # constraint subject to
         st = np.dot(np.dot(K, H), K.T)
-        eig_values, eig_vecs = scipy.linalg.eig(obj, st)
+        eig_values, eig_vecs = eig(obj, st)
         
         ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
         idx_sorted = np.argsort(ev_abs)[:self.n_components]

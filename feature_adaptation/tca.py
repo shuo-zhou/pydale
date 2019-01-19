@@ -3,7 +3,7 @@
 # =============================================================================
 
 import numpy as np
-import scipy.linalg
+from scipy.linalg import eig
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.utils.validation import check_is_fitted
@@ -79,7 +79,7 @@ class TCA(BaseEstimator, TransformerMixin):
         
         obj = np.dot(np.dot(K, L), K.T) + self.lambda_ * np.eye(n)
         st = np.dot(np.dot(K, H), K.T)
-        eig_vals, eig_vecs = scipy.linalg.eig(obj, st)
+        eig_vals, eig_vecs = eig(obj, st)
         
 #        ev_abs = np.array(list(map(lambda item: np.abs(item), eig_vals)))
 #        idx_sorted = np.argsort(ev_abs)
@@ -170,7 +170,7 @@ class SSTCA(BaseEstimator, TransformerMixin):
             st = np.dot(np.dot(K, (H+hsic)), K.T)
         else:
             st = np.dot(np.dot(K, H), K.T)
-        eig_vals, eig_vecs = scipy.linalg.eig(obj, st)
+        eig_vals, eig_vecs = eig(obj, st)
         
 #        ev_abs = np.array(list(map(lambda item: np.abs(item), eig_vals)))
 #        idx_sorted = np.argsort(ev_abs)
