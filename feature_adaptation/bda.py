@@ -137,7 +137,7 @@ class JDA(BaseEstimator, TransformerMixin):
 #        X = self.scaler.transform(X)
         check_is_fitted(self, 'Xs')
         check_is_fitted(self, 'Xt')
-        X_fit = np.vstack(self.Xs, self.Xt)
+        X_fit = np.vstack((self.Xs, self.Xt))
         K = self.get_kernel(X, X_fit)
         U_ = self.U[:,:self.n_components]
         X_transformed = np.dot(K, U_)

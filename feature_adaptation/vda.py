@@ -118,7 +118,7 @@ class VDA(BaseEstimator, TransformerMixin):
         ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
         idx_sorted = np.argsort(ev_abs)[:self.n_components]
 
-        U = np.zeros((eig_vecs.shape[0], self.n_components))
+        U = np.zeros(eig_vecs.shape)
 
         U[:,:] = eig_vecs[:, idx_sorted]
         self.U = np.asarray(U, dtype = np.float)
@@ -139,9 +139,10 @@ class VDA(BaseEstimator, TransformerMixin):
         #X = self.scaler.transform(X)
         check_is_fitted(self, 'Xs')
         check_is_fitted(self, 'Xt')
-        X_fit = np.vstack(self.Xs, self.Xt)
+        X_fit = np.vstack((self.Xs, self.Xt))
         K = self.get_kernel(X, X_fit)
-        X_transformed = np.dot(K, self.U)
+        U_ = self.U[:,:self.n_components]
+        X_transformed = np.dot(K, U_)
         return X_transformed
     
     def fit_transform(self, Xs, Xt, ys, yt):
@@ -155,7 +156,6 @@ class VDA(BaseEstimator, TransformerMixin):
             tranformed Xs_transformed, Xt_transformed
         '''
         self.fit(Xs, Xt, ys, yt)
-        K_ = np.dot(self.K, self.U)
-        Xs_transformed = K_[:self.ns, :]
-        Xt_transformed = K_[self.ns:, :]
+        Xs_transformed = self.transform(Xs)
+        Xt_transformed = self.transform(Xs)
         return Xs_transformed, Xt_transformed
