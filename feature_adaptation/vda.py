@@ -14,7 +14,7 @@ from sklearn.utils.validation import check_is_fitted
 # =============================================================================
 
 class VDA(BaseEstimator, TransformerMixin):
-    def __init__(self, n_components, kernel_type='linear', lambda_=1, **kwargs):
+    def __init__(self, n_components, kernel ='linear', lambda_=1, **kwargs):
         '''
         Init function
         Parameters
@@ -25,7 +25,7 @@ class VDA(BaseEstimator, TransformerMixin):
         '''
         self.n_components = n_components
         self.kwargs = kwargs
-        self.kernel_type = kernel_type
+        self.kernel = kernel
         self.lambda_ = lambda_
 
     def get_L(self, ns, nt):

@@ -14,6 +14,36 @@ from sklearn.utils.validation import check_is_fitted
 # vol. 22, no. 2, pp. 199-210, Feb. 2011.
 # =============================================================================
 
+def get_L(ns, nt):
+    '''
+    Get kernel weight matrix
+    Parameters:
+        ns: source domain sample size
+        nt: target domain sample size
+    Return: 
+        Kernel weight matrix L
+    '''
+    a = 1.0 / (ns * np.ones((ns, 1)))
+    b = -1.0 / (nt * np.ones((nt, 1)))
+    e = np.vstack((a, b))
+    L = np.dot(e, e.T)
+    return L
+
+def get_kernel(X, Y=None, kernel = 'linear', **kwargs):
+    '''
+    Generate kernel matrix
+    Parameters:
+        X: X matrix (n1,d)
+        Y: Y matrix (n2,d)
+    Return: 
+        Kernel matrix
+    '''
+
+    return pairwise_kernels(X, Y=Y, metric = kernel, 
+                            filter_params = True, **kwargs)
+   
+
+
 class TCA(BaseEstimator, TransformerMixin):
     def __init__(self, n_components, kernel='linear', lambda_=1, **kwargs):
         '''
@@ -29,35 +59,6 @@ class TCA(BaseEstimator, TransformerMixin):
         self.kernel = kernel
         self.lambda_ = lambda_
 
-    def get_L(self, ns, nt):
-        '''
-        Get kernel weight matrix
-        Parameters:
-            ns: source domain sample size
-            nt: target domain sample size
-        Return: 
-            Kernel weight matrix L
-        '''
-        a = 1.0 / (ns * np.ones((ns, 1)))
-        b = -1.0 / (nt * np.ones((nt, 1)))
-        e = np.vstack((a, b))
-        L = np.dot(e, e.T)
-        return L
-
-    def get_kernel(self, X, Y=None):
-        '''
-        Generate kernel matrix
-        Parameters:
-            X: X matrix (n1,d)
-            Y: Y matrix (n2,d)
-        Return: 
-            Kernel matrix
-        '''
-
-        return pairwise_kernels(X, Y=Y, metric = self.kernel, 
-                                filter_params = True, **self.kwargs)
-       
-
     def fit(self, Xs, Xt):
         '''
         Parameters:
@@ -68,9 +69,9 @@ class TCA(BaseEstimator, TransformerMixin):
         self.nt = Xt.shape[0]
         n = self.ns + self.nt
         X = np.vstack((Xs, Xt))
-        L = self.get_L(self.ns, self.nt)
+        L = get_L(self.ns, self.nt)
         L[np.isnan(L)] = 0
-        K = self.get_kernel(X)
+        K = get_kernel(X, kernel = self.kernel, **self.kwargs)
         K[np.isnan(K)] = 0
         #obj = np.trace(np.dot(K,L))
 
@@ -105,7 +106,7 @@ class TCA(BaseEstimator, TransformerMixin):
         check_is_fitted(self, 'Xs')
         check_is_fitted(self, 'Xt')
         X_fit = np.vstack((self.Xs, self.Xt))
-        K = self.get_kernel(X, X_fit)
+        K = get_kernel(X, X_fit, kernel = self.kernel, **self.kwargs)
         U_ = self.U[:,:self.n_components]
         X_transformed = np.dot(K, U_)
         return X_transformed
@@ -124,3 +125,18 @@ class TCA(BaseEstimator, TransformerMixin):
         Xt_transformed = self.transform(Xt)
         return Xs_transformed, Xt_transformed
     
+    
+class SSTCA(BaseEstimator, TransformerMixin):
+    def __init__(self, n_components, kernel='linear', lambda_=1, **kwargs):
+        '''
+        Init function
+        Parameters
+            n_components: n_componentss after tca (n_components <= d)
+            kernel_type: 'rbf' | 'linear' | 'poly' (default is 'linear')
+            kernelparam: kernel param
+            lambda_: regulization param
+        '''
+        self.n_components = n_components
+        self.kwargs = kwargs
+        self.kernel = kernel
+        self.lambda_ = lambda_    
