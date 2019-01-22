@@ -3,7 +3,7 @@
 # =============================================================================
 import numpy as np
 import sys
-import scipy.linalg 
+from scipy.linalg import eig
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.utils.validation import check_is_fitted
@@ -14,7 +14,7 @@ from sklearn.utils.validation import check_is_fitted
 # =============================================================================
 
 class VDA(BaseEstimator, TransformerMixin):
-    def __init__(self, n_components, kernel_type='linear', lambda_=1, **kwargs):
+    def __init__(self, n_components, kernel ='linear', lambda_=1, **kwargs):
         '''
         Init function
         Parameters
@@ -25,7 +25,7 @@ class VDA(BaseEstimator, TransformerMixin):
         '''
         self.n_components = n_components
         self.kwargs = kwargs
-        self.kernel_type = kernel_type
+        self.kernel = kernel
         self.lambda_ = lambda_
 
     def get_L(self, ns, nt):
@@ -69,9 +69,9 @@ class VDA(BaseEstimator, TransformerMixin):
 #        self.scaler.fit(X)
 #        X = self.scaler.transform(X)
         #X = np.dot(X.T, np.diag(1.0 / np.sqrt(np.sum(np.square(X), axis = 1)))).T 
-        n, m = X.shape
         ns = Xs.shape[0]
         nt = Xt.shape[0]
+        n = ns + nt
         class_all = np.unique(ys)
         if class_all.all() != np.unique(yt).all():
             sys.exit('Source and target domain should have the same labels')
@@ -113,12 +113,12 @@ class VDA(BaseEstimator, TransformerMixin):
         obj = np.dot(np.dot(K, L), K.T) + self.lambda_ * np.eye(n) + Sw
         # constraint subject to
         st = np.dot(np.dot(K, H), K.T)
-        eig_values, eig_vecs = scipy.linalg.eig(obj, st)
+        eig_values, eig_vecs = eig(obj, st)
         
         ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
         idx_sorted = np.argsort(ev_abs)[:self.n_components]
 
-        U = np.zeros((eig_vecs.shape[0], self.n_components))
+        U = np.zeros(eig_vecs.shape)
 
         U[:,:] = eig_vecs[:, idx_sorted]
         self.U = np.asarray(U, dtype = np.float)
@@ -139,9 +139,10 @@ class VDA(BaseEstimator, TransformerMixin):
         #X = self.scaler.transform(X)
         check_is_fitted(self, 'Xs')
         check_is_fitted(self, 'Xt')
-        X_fit = np.vstack(self.Xs, self.Xt)
+        X_fit = np.vstack((self.Xs, self.Xt))
         K = self.get_kernel(X, X_fit)
-        X_transformed = np.dot(K, self.U)
+        U_ = self.U[:,:self.n_components]
+        X_transformed = np.dot(K, U_)
         return X_transformed
     
     def fit_transform(self, Xs, Xt, ys, yt):
@@ -155,7 +156,6 @@ class VDA(BaseEstimator, TransformerMixin):
             tranformed Xs_transformed, Xt_transformed
         '''
         self.fit(Xs, Xt, ys, yt)
-        K_ = np.dot(self.K, self.U)
-        Xs_transformed = K_[:self.ns, :]
-        Xt_transformed = K_[self.ns:, :]
+        Xs_transformed = self.transform(Xs)
+        Xt_transformed = self.transform(Xs)
         return Xs_transformed, Xt_transformed

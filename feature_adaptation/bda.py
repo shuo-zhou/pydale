@@ -9,14 +9,14 @@ from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.utils.validation import check_is_fitted
 #from sklearn.preprocessing import StandardScaler
 # =============================================================================
-# Joint Distribution Adaptation: JDA
-# Ref: Mingsheng Long, Jianmin Wang, Guiguang Ding, Jiaguang Sun, Philip S. Yu,
-# Transfer Feature Learning with Joint Distribution Adaptation, IEEE 
-# International Conference on Computer Vision (ICCV), 2013.
+# Balanced Distribution Adaptation: BDA
+# Wang, J., Chen, Y., Hao, S., Feng, W. and Shen, Z., 2017, November. Balanced 
+# distribution adaptation for transfer learning. In Data Mining (ICDM), 2017 
+# IEEE International Conference on (pp. 1129-1134). IEEE.
 # =============================================================================
 
 class JDA(BaseEstimator, TransformerMixin):
-    def __init__(self, n_components, kernel = 'linear', lambda_=1, **kwargs):
+    def __init__(self, n_components, kernel = 'linear', lambda_=1, mu = 0.5, **kwargs):
         '''
         Init function
         Parameters
@@ -25,11 +25,13 @@ class JDA(BaseEstimator, TransformerMixin):
             ‘cosine’] (default is 'linear')
             **kwargs: kernel param
             lambda_: regulization param
+            mu: trade-off for marginal and conditional distribution mismatch
         '''
         self.n_components = n_components
         self.kwargs = kwargs
         self.kernel = kernel
         self.lambda_ = lambda_
+        self.mu = mu
 
     def get_L(self, ns, nt):
         '''
@@ -82,6 +84,7 @@ class JDA(BaseEstimator, TransformerMixin):
     
         # Construct MMD kernel weight matrix
         L = self.get_L(ns, nt) * C
+        L = (1-self.mu) * L
     
         # Within class MMD kernel weight matrix
         if len(yt) != 0 and len(yt) == nt:
@@ -92,7 +95,7 @@ class JDA(BaseEstimator, TransformerMixin):
                 e2[np.where(yt == c)[0]] = -1.0 / np.where(yt == c)[0].shape[0]
                 e = np.vstack((e1, e2))
                 e[np.where(np.isinf(e))[0]] = 0
-                L = L + np.dot(e, e.T)
+                L = L + self.mu * np.dot(e, e.T)
         else:
             sys.exit('Target domain data and label should have the same size!')
     
@@ -114,16 +117,14 @@ class JDA(BaseEstimator, TransformerMixin):
         ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
 #        idx_sorted = np.argsort(ev_abs)[:self.n_components]
         idx_sorted = np.argsort(ev_abs)
-        
-        U = np.zeros(eig_vecs.shape)
+        U = np.zeros((eig_vecs.shape[0], self.n_components))
 
         U[:,:] = eig_vecs[:, idx_sorted]
         self.U = np.asarray(U, dtype = np.float)
-        self.K = K
+      
         self.Xs = Xs
         self.Xt = Xt
-        self.nt = nt
-        self.ns = ns
+      
         return self
     
     def transform(self, X):
