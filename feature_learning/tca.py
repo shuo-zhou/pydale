@@ -4,9 +4,11 @@
 
 import numpy as np
 from scipy.linalg import eig
+from numpy.linalg import multi_dot
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.utils.validation import check_is_fitted
+from sklearn.neighbors import kneighbors_graph
 # =============================================================================
 # Transfer Component Analysis: TCA
 # Ref: S. J. Pan, I. W. Tsang, J. T. Kwok and Q. Yang, "Domain Adaptation via 
@@ -41,29 +43,45 @@ def get_kernel(X, Y=None, kernel = 'linear', **kwargs):
 
     return pairwise_kernels(X, Y=Y, metric = kernel, 
                             filter_params = True, **kwargs)
-   
-
+      
+def get_lapmat(X, k = 5):
+    n = X.shape[0]
+    knn_graph = kneighbors_graph(X, n_neighbors = k).toarray()
+    knn_mat = np.zeros((n, n))
+    knn_mat[np.logical_or(knn_graph, knn_graph.T)] = 1
+    D = np.diag(np.sum(knn_mat, axis = 1))
+    return D - knn_mat
 
 class TCA(BaseEstimator, TransformerMixin):
-    def __init__(self, n_components, kernel='linear', lambda_=1, **kwargs):
+    def __init__(self, n_components, kernel='linear', lambda_=1, mu = 1, gamma = 0.5, k = 5, **kwargs):
         '''
         Init function
         Parameters
             n_components: n_componentss after tca (n_components <= d)
-            kernel_type: 'rbf' | 'linear' | 'poly' (default is 'linear')
-            kernelparam: kernel param
+            kernel: 'rbf' | 'linear' | 'poly' (default is 'linear')
             lambda_: regulization param
+            mu: KNN graph param
+            k: number of nearest neighbour for KNN graph
+            gamma: label dependence param
         '''
         self.n_components = n_components
         self.kwargs = kwargs
         self.kernel = kernel
-        self.lambda_ = lambda_
+        self.lambda_ = lambda_ 
+        self.mu = mu
+        self.gamma = gamma
+        self.k = k
 
-    def fit(self, Xs, Xt):
+    def fit(self, Xs, Xt, ys = None, yt = None, **kwargs):
         '''
         Parameters:
-            Xs: Source domain data, array-like, shape (n_samples, n_feautres)
-            Xt: Target domain data, array-like, shape (n_samples, n_feautres)
+            Xs: Source domain data, array-like, shape (ns_samples, n_feautres)
+            Xt: Target domain data, array-like, shape (nt_samples, n_feautres)
+            ys: Source domain labels, array-like, shape (ns_samples,)
+            yt: Target domain labels, array-like, shape (nt_samples,)
+        Note:
+            Unsupervised TCA is performed if ys and yt are not given.
+            Semi-supervised TCA is performed is ys and yt are given.
         '''
         self.ns = Xs.shape[0]
         self.nt = Xt.shape[0]
@@ -73,103 +91,21 @@ class TCA(BaseEstimator, TransformerMixin):
         L[np.isnan(L)] = 0
         K = get_kernel(X, kernel = self.kernel, **self.kwargs)
         K[np.isnan(K)] = 0
-        #obj = np.trace(np.dot(K,L))
-
-        H = np.eye(n) - 1. / n * np.ones((n, n))
         
-        obj = np.dot(np.dot(K, L), K.T) + self.lambda_ * np.eye(n)
-        st = np.dot(np.dot(K, H), K.T)
-        eig_vals, eig_vecs = eig(obj, st)
-        
-#        ev_abs = np.array(list(map(lambda item: np.abs(item), eig_vals)))
-#        idx_sorted = np.argsort(ev_abs)
-        idx_sorted = eig_vals.argsort()
-
-       
-        self.eig_vals = eig_vals[idx_sorted]
-        self.U = eig_vecs[:, idx_sorted]
-        self.U = np.asarray(self.U, dtype = np.float)
-#        self.components_ = np.dot(X.T, U)
-#        self.components_ = self.components_.T
-
-        self.Xs = Xs
-        self.Xt = Xt
-        return self
-
-    def transform(self, X):
-        '''
-        Parameters:
-            X: array-like, shape (n_samples, n_feautres)
-        Return:
-            tranformed data
-        '''
-        check_is_fitted(self, 'Xs')
-        check_is_fitted(self, 'Xt')
-        X_fit = np.vstack((self.Xs, self.Xt))
-        K = get_kernel(X, X_fit, kernel = self.kernel, **self.kwargs)
-        U_ = self.U[:,:self.n_components]
-        X_transformed = np.dot(K, U_)
-        return X_transformed
-
-
-    def fit_transform(self, Xs, Xt):
-        '''
-        Parameters:
-            Xs: Source domain data, array-like, shape (n_samples, n_feautres)
-            Xt: Target domain data, array-like, shape (n_samples, n_feautres)
-        Return:
-            tranformed Xs_transformed, Xt_transformed
-        '''
-        self.fit(Xs, Xt)
-        Xs_transformed = self.transform(Xs)
-        Xt_transformed = self.transform(Xt)
-        return Xs_transformed, Xt_transformed
-    
-    
-class SSTCA(BaseEstimator, TransformerMixin):
-    def __init__(self, n_components, kernel='linear', lambda_=1, **kwargs):
-        '''
-        Init function
-        Parameters
-            n_components: n_componentss after tca (n_components <= d)
-            kernel_type: 'rbf' | 'linear' | 'poly' (default is 'linear')
-            kernelparam: kernel param
-            lambda_: regulization param
-        '''
-        self.n_components = n_components
-        self.kwargs = kwargs
-        self.kernel = kernel
-        self.lambda_ = lambda_    
-
-    def fit(self, Xs, Xt, ys = None, yt = None):
-        '''
-        Parameters:
-            Xs: Source domain data, array-like, shape (n_samples, n_feautres)
-            Xt: Target domain data, array-like, shape (n_samples, n_feautres)
-        '''
-        self.ns = Xs.shape[0]
-        self.nt = Xt.shape[0]
-        n = self.ns + self.nt
-        X = np.vstack((Xs, Xt))
-        L = get_L(self.ns, self.nt)
-        L[np.isnan(L)] = 0
-        K = get_kernel(X, kernel = self.kernel, **self.kwargs)
-        K[np.isnan(K)] = 0
+        I = np.eye(n)
+        H = I - 1. / n * np.ones((n, n))
 
         if ys is not None and yt is not None:
             y = np.concatenate((ys, yt))    
             y = y.reshape((n,1))
-            Kyy = np.dot(y, y.T)
-        #obj = np.trace(np.dot(K,L))
-
-        H = np.eye(n) - 1. / n * np.ones((n, n))
-        
-        obj = np.dot(np.dot(K, L), K.T) + self.lambda_ * np.eye(n)
-        if ys is not None and yt is not None:
-            hsic = np.matmul(np.matmul(H, Kyy), H)
-            st = np.dot(np.dot(K, (H+hsic)), K.T)
-        else:
-            st = np.dot(np.dot(K, H), K.T)
+            Kyy = self.gamma * np.dot(y, y.T) + (1-self.gamma) * I
+            Lap_ = get_lapmat(K, k =self.k)
+            obj = multi_dot([K, (L+ self.mu * Lap_), K.T]) + self.lambda_ * I
+            st = multi_dot([K, H, Kyy, H, K.T])
+        #obj = np.trace(np.dot(K,L))            
+        else: 
+            obj = multi_dot([K, L, K.T]) + self.lambda_ * I
+            st = multi_dot([K, H, K.T])
         eig_vals, eig_vecs = eig(obj, st)
         
 #        ev_abs = np.array(list(map(lambda item: np.abs(item), eig_vals)))
