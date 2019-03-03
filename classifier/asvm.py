@@ -67,3 +67,4 @@ class ASVM(object):
     def decision_function(self,X):
         decision = np.dot(X,self.source_w.T)+np.dot(X,self.coef_.T)
         return decision[:,0]
+    

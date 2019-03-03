@@ -38,7 +38,7 @@ class MIDA(BaseEstimator, TransformerMixin):
             kernel: 'rbf' | 'linear' | 'poly' (default is 'linear')
             penalty: None | 'l2' (default is None)
             lambda_: regulization param (if penalty==l2)
-            mu: KNN graph param
+            mu: total captured variance param
             k: number of nearest neighbour for KNN graph
             eta: label dependence param
         '''
@@ -72,11 +72,11 @@ class MIDA(BaseEstimator, TransformerMixin):
         if y is not None:
             y = y.reshape((n,1))
             Ky = np.dot(y, y.T)
-            obj = self.gamma * multi_dot([K, H, Kd, H, K.T])
+            obj = multi_dot([K, H, Kd, H, K.T])
             st = multi_dot([K, H, (self.mu * I + self.eta*Ky), H, K.T])
         #obj = np.trace(np.dot(K,L))            
         else: 
-            obj = self.gamma * multi_dot([K, H, Kd, H, K.T])
+            obj = multi_dot([K, H, Kd, H, K.T])
             st = multi_dot([K, H, K.T])
             
         if self.penalty == 'l2':
