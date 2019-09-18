@@ -30,7 +30,7 @@ class CDSVM(BaseEstimator):
         n_features = X.shape[1]
         X = X.reshape((n_samples, n_features))
         y = y.reshape((n_samples, 1))
-        self.support_vector_labels = self.support_vector_labels.reshape((n_support,1))
+        self.support_vector_labels = self.support_vector_labels.reshape((n_support, 1))
 
         # create matrix P
         paramCount = n_support + n_samples + n_features
@@ -40,9 +40,9 @@ class CDSVM(BaseEstimator):
         # create vector q
         q = np.zeros((paramCount, 1))
         q[n_features: (n_features + n_samples), 0] = self.C * 1
-        q_ = np.zeros((n_support,1))
+        q_ = np.zeros((n_support, 1))
         for row in range(n_support):
-            q_[row,0] = self.C * self.sigma(self.support_vectors[row,:],X)
+            q_[row, 0] = self.C * self.sigma(self.support_vectors[row, :], X)
         q[(n_features + n_samples):, 0] = q_[:, 0]
 
         # create the Matrix of SVM contraints
@@ -97,6 +97,6 @@ class CDSVM(BaseEstimator):
         return accuracy_score(pred, y)
     
     def get_params(self, deep=True):
-        out = {'support_vectors':self.support_vectors, 'support_vector_labels':
+        out = {'support_vectors': self.support_vectors, 'support_vector_labels':
             self.support_vector_labels, 'C': self.C, 'beta': self.beta}
         return out
