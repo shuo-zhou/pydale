@@ -8,6 +8,7 @@ from scipy.linalg import eig, sqrtm
 import scipy.sparse as sparse
 from numpy.linalg import multi_dot, inv, solve
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.metrics import pairwise_distances
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.utils.validation import check_is_fitted
 from sklearn.preprocessing import StandardScaler
@@ -41,12 +42,33 @@ def get_kernel(X, Y=None, kernel='linear', **kwargs):
                             filter_params=True, **kwargs)
 
 
+def get_lapmat(X, n_neighbour=5, metric='cosine', mode='distance',
+               normalise=True):
+    n = X.shape[0]
+    knn_graph = kneighbors_graph(X, n_neighbour, metric=metric,
+                                 mode=mode).toarray()
+    W = np.zeros((n, n))
+    knn_idx = np.logical_or(knn_graph, knn_graph.T)
+    if mode == 'distance':
+        graph_kernel = pairwise_distances(X, metric=metric)
+        W[knn_idx] = graph_kernel[knn_idx]
+    else:
+        W[knn_idx] = 1
+
+    D = np.diag(np.sum(W, axis=1))
+    if normalise:
+        D_ = inv(sqrtm(D))
+        lapmat = np.eye(n) - multi_dot([D_, W, D_])
+    else:
+        lapmat = D - W
+    return lapmat
+
+
 class ARSVM(BaseEstimator, TransformerMixin):
-    def __init__(self, C=1, kernel='linear', lambda_=1, eta=0, solver='osqp', **kwargs):
+    def __init__(self, C=1, kernel='linear', lambda_=1, eta=0, k=5, solver='osqp', **kwargs):
         """
         Init function
         Parameters
-            n_components: n_componentss after tca (n_components <= d)
             kernel: 'rbf' | 'linear' | 'poly' (default is 'linear')
             lambda_: MMD regulization param
             eta: manifold regulization param
@@ -59,9 +81,10 @@ class ARSVM(BaseEstimator, TransformerMixin):
         self.C = C
         self.eta =eta
         self.solver = solver
+        self.n_neighbour = k
         self.scaler = StandardScaler()
 
-    def fit(self, Xs, Xtl, Xtu, ys, yt, W=None):
+    def fit(self, Xs, ys, Xtl=None, Xtu=None, yt=None):
         """
         solve min_x x^TPx + q^Tx, s.t. Gx<=h, Ax=b
         Parameters:
@@ -104,18 +127,14 @@ class ARSVM(BaseEstimator, TransformerMixin):
         # H = I - 1. / n * np.ones((n, n))
         K = get_kernel(X, kernel=self.kernel, **self.kwargs)
         K[np.isnan(K)] = 0
-        # if W is None:
-        #     W = np.eye(n)
-
-        W = get_kernel(X, kernel='cosine')
-        D = np.diag(np.sum(W, axis=1))
-        L = I - multi_dot([inv(sqrtm(D)), W, inv(sqrtm(D))])
+    
+        L = get_lapmat(X, n_neighbour=self.n_neighbour)
 
         # dual
         Y = np.diag(y)
         J = np.zeros((nl, n))
         J[:nl, :n] = np.eye(nl)
-        Q_ = self.C * I + multi_dot([(self.lambda_ * M + self.eta * L), K])
+        Q_ = self.C * I + multi_dot([(self.lambda_ * M + self.eta/np.square(n) * L), K])
         Q = multi_dot([Y, J, K, inv(Q_), J.T, Y])
         q = -1 * np.ones((nl, 1))
 
@@ -202,7 +221,7 @@ class ARSVM(BaseEstimator, TransformerMixin):
         
         return np.sign(self.decision_function(self.scaler.transform(X)))
 
-    def fit_predict(self, Xs, Xtl, Xtu, ys, yt, W=None):
+    def fit_predict(self, Xs, ys, Xtl=None, Xtu=None, yt=None):
         """
         solve min_x x^TPx + q^Tx, s.t. Gx<=h, Ax=b
         Parameters:
@@ -212,6 +231,6 @@ class ARSVM(BaseEstimator, TransformerMixin):
             ys: Source label, array-like, shape (ns_samples, )
             yt: Target label, array-like, shape (ntl_samples, )
         """
-        self.fit(Xs, Xtl, Xtu, ys, yt, W)
+        self.fit(Xs, Xtl, Xtu, ys, yt)
         y_pred = self.predict(Xtu)
         return y_pred

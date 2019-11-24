@@ -11,58 +11,105 @@ Cross-domain video concept detection using adaptive svms.
 In Proceedings of the 15th ACM international conference on Multimedia
  (pp. 188-197). ACM.
 """
+
+import warnings
+import osqp
 import numpy as np
+import scipy.sparse as sparse
+from numpy.linalg import multi_dot
 from cvxopt import matrix, solvers
+from sklearn.metrics.pairwise import pairwise_kernels
+from sklearn.utils.validation import check_is_fitted
+from sklearn.base import BaseEstimator
 
-## A linear adaptive svm
 
-
-class ASVM(object):
-    def __init__(self,source_coef, C=1.0):
+class ASVM(BaseEstimator):
+    def __init__(self, C=1.0, clfs=None, t=None, kernel='linear', solver='osqp', **kwargs):
         self.C = C
-        self.source_coef = source_coef
-        self.n_features = self.source_coef.shape[1]
+        self.src_clf = None
+        self.kwargs = kwargs
+        self.kernel = kernel
+        self.clfs = clfs
+        if t is None and len(clfs) >= 0:
+            self.t = np.zeros(len(clfs))
+            self.t[:] = 1 / len(clfs)
+        else:
+            self.t = t
+        self.solver = solver
+        self.n_ = None
+        self.alpha = None
 
     def fit(self, X, y):
-        self.n_samples = X.shape[0]
-        paramCount = self.n_samples+self.n_features
+        """
+        solve min_x x^TPx + q^Tx, s.t. Gx<=h, Ax=b
+        :param X: Training data
+        :param y: Traning data labels
+        :return: self
+        """
+        self.n_ = X.shape[0]
         
         # create matrix P
-        P = np.zeros((paramCount,paramCount))
-        P[:self.n_features, :self.n_features] = np.eye(self.n_features)
+        P = pairwise_kernels(X, metric=self.kernel, **self.kwargs)
             
         # create vector q
-        q = np.zeros((self.n_features + self.n_samples, 1))
-        q[self.n_features:, :] = self.C * 1
+        q = np.zeros(self.n_)
+        for i in range(len(self.clfs)):
+            clf = self.clfs[i]
+            q += self.t[i] * clf.decision_function(X)
 
         # create the Matrix of SVM contraints
-        G = np.zeros((2*self.n_samples, paramCount))
-        X = X.reshape((self.n_samples,self.n_features))
-        y = y.reshape((self.n_samples,1))
-        G[:self.n_samples, :self.n_features] = -np.multiply(X, y)
-        G[:, self.n_features: (self.n_features+ self.n_samples)] = -np.vstack((
-            np.eye(self.n_samples), np.eye(self.n_samples)))
-            
-        # create vector of h
-        h = np.zeros((2*self.n_samples,1))
-        h[:self.n_samples, :] = np.multiply((y, np.dot(self.source_coef, X.T))) -1    
-                
-        # convert numpy matrix to cvxopt matrix
-        P = 2*matrix(P)
-        q = matrix(q)
-        G = matrix(G)
-        h = matrix(h)
+        G = sparse.eye(self.n_)
 
-        solvers.options['show_progress'] = False
-        sol = solvers.qp(P, q, G, h)
-        
-        self.coef_ = sol['x'][0:self.n_features]
-        self.coef_ = np.array(self.coef_).T
+        # create vector of h
+        h = np.zeros(self.n_)
+        h[:self.n_, :] = self.C
+
+        A = matrix(y.reshape(1, -1).astype('float32'))
+        b = matrix(np.zeros(1).astype('float32'))
+
+        self.alpha = self.sol_qp(P, q, G, h, A, b)
+        self.X = X
+        self.y = y
+
+    def sol_qp(self, P, q, G, h, A, b):
+        if self.solver == 'osqp':
+            warnings.simplefilter('ignore', sparse.SparseEfficiencyWarning)
+            P = sparse.csc_matrix(P)
+            G = sparse.vstack([sparse.eye(G), A]).tocsc()
+            l = np.zeros((h.shape[0] + 1, 1))
+            u = np.zeros(l.shape)
+            u[:h.shape[0], 0] = h[:]
+
+            prob = osqp.OSQP()
+            prob.setup(P, q, G, l, u, verbose=False)
+            res = prob.solve()
+            alpha = res.x
+
+        elif self.solver == 'cvxopt':
+            P = matrix(P)
+            q = matrix(q)
+            G = matrix(G)
+            h = matrix(h)
+            A = matrix(A)
+            b = matrix(b)
+
+            solvers.options['show_progress'] = False
+            sol = solvers.qp(P, q, G, h, A, b)
+            alpha = np.array(sol['x']).reshape(P.shape[0])
+
+        return alpha
     
     def predict(self, X):
         pred = np.sign(self.decision_function(X))
         return pred
         
     def decision_function(self, X):
-        decision = np.dot(X, self.source_w.T)+np.dot(X, self.coef_.T)
-        return decision[:, 0]
+        check_is_fitted(self, 'X')
+        check_is_fitted(self, 'y')
+        dec_src = np.zeros(X.shape[0])
+        for i in range(len(self.clfs)):
+            clf = self.clfs[i]
+            dec_src += self.t[i] * clf.decision_function(X)
+        Kx = pairwise_kernels(X, self.X, self.kernel, **self.kwargs)
+        dec_delta = multi_dot([Kx, np.multiply(self.alpha, self.y)])
+        return dec_src + dec_delta

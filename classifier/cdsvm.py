@@ -11,68 +11,56 @@ Ref: Jiang, W., Zavesky, E., Chang, S.-F., and Loui, A. Cross-domain learning me
     for high-level visual concept classification. In Image Processing, 2008. ICIP
     2008. 15th IEEE International Conference on (2008), IEEE, pp. 161-164.
 """
+import warnings
+import osqp
 import numpy as np
+import scipy.sparse as sparse
+from numpy.linalg import multi_dot
 from cvxopt import matrix, solvers
-from sklearn.metrics import accuracy_score
+from sklearn.metrics.pairwise import pairwise_kernels
+from sklearn.utils.validation import check_is_fitted
 from sklearn.base import BaseEstimator
 
 
 class CDSVM(BaseEstimator):
-    def __init__(self, support_vectors, support_vector_labels, C=0.1, beta=0.5):
+    def __init__(self, X_src, y_src, C=0.1, beta=0.5, kernel='linear', solver='osqp', **kwargs):
         self.C = C
         self.beta = beta
-        self.support_vectors = support_vectors
-        self.support_vector_labels = support_vector_labels
+        self.X_src = X_src
+        self.y_src = y_src
+        self.solver = solver
+        self.n_ = None
+        self.alpha = None
+        self.kwargs = kwargs
+        self.kernel = kernel
         
     def fit(self, X, y):
-        n_support = len(self.support_vector_labels)
-        n_samples = X.shape[0]
-        n_features = X.shape[1]
-        X = X.reshape((n_samples, n_features))
-        y = y.reshape((n_samples, 1))
-        self.support_vector_labels = self.support_vector_labels.reshape((n_support, 1))
+        n_support = len(self.y_src)
+        X_all = np.concatenate((self.X_src, X))
+        y_all = np.concatenate((self.y_src, y))
+        n_ = X_all.shape[0]
 
         # create matrix P
-        paramCount = n_support + n_samples + n_features
-        P = np.zeros((paramCount, paramCount))
-        P[:n_features, :n_features] = np.eye(n_features)
+        P = pairwise_kernels(X_all, metric=self.kernel, **self.kwargs)
 
         # create vector q
-        q = np.zeros((paramCount, 1))
-        q[n_features: (n_features + n_samples), 0] = self.C * 1
-        q_ = np.zeros((n_support, 1))
-        for row in range(n_support):
-            q_[row, 0] = self.C * self.sigma(self.support_vectors[row, :], X)
-        q[(n_features + n_samples):, 0] = q_[:, 0]
+        q = np.zeros((n_, 1))
 
         # create the Matrix of SVM contraints
-        G = np.zeros((n_samples*2, paramCount))
-        G[:n_samples, :n_features] = -np.multiply(X, y)
-        G[:, n_features: (n_features+n_samples)] = - np.vstack((np.eye(n_samples), 
-                np.eye(n_samples)))
-        G_ = np.zeros((n_support*2, paramCount))
-        G_[:n_support, :n_features] = -np.multiply(
-                self.support_vectors, self.support_vector_labels)
-        G_[:, (n_features+n_samples):] = - np.vstack((np.eye(n_support), 
-                np.eye(n_support)))
-        G = np.vstack((G, G_))
+        G = sparse.eye(n_)
 
         # create vector of h
-        h = np.zeros(((n_samples+n_support) * 2, 1))
-        h[:n_samples, 0] = -1
-        h[(n_samples*2):(n_samples*2+n_support)] = -1
-        
-        # convert numpy matrix to cvxopt matrix
-        P = 2*matrix(P)
-        q = matrix(q)
-        G = matrix(G)
-        h = matrix(h)
+        h = np.zeros(n_)
+        for i in range(n_support):
+            h[i] = self.sigma(self.X_src[i, :], X) * self.C
+        h[n_support:, :] = self.C
 
-        solvers.options['show_progress'] = False
-        sol = solvers.qp(P, q, G, h)
-        
-        self.coef_ = sol['x'][0:n_features]
-        self.coef_ = np.array(self.coef_).T
+        A = matrix(y.reshape(1, -1).astype('float32'))
+        b = matrix(np.zeros(1).astype('float32'))
+
+        self.alpha = self.sol_qp(P, q, G, h, A, b)
+        self.X = X_all
+        self.y = y_all
 
     def sigma(self, support_vector, X):
         n_samples = X.shape[0]
@@ -84,19 +72,41 @@ class CDSVM(BaseEstimator):
         
     def predict(self, X):
         pred = np.sign(self.decision_function(X))
-        
         return pred
         
     def decision_function(self, X):
-        decision = np.dot(X, self.coef_.T)
+        check_is_fitted(self, 'X')
+        check_is_fitted(self, 'y')
+        Kx = pairwise_kernels(X, self.X, self.kernel, **self.kwargs)
+        dec = multi_dot([Kx, np.multiply(self.alpha, self.y)])
 
-        return decision[:, 0]
-    
-    def score(self, X, y):
-        pred = self.predict(X)
-        return accuracy_score(pred, y)
-    
-    def get_params(self, deep=True):
-        out = {'support_vectors': self.support_vectors, 'support_vector_labels':
-            self.support_vector_labels, 'C': self.C, 'beta': self.beta}
-        return out
+        return dec
+
+    def sol_qp(self, P, q, G, h, A, b):
+        if self.solver == 'osqp':
+            warnings.simplefilter('ignore', sparse.SparseEfficiencyWarning)
+            P = sparse.csc_matrix(P)
+            G = sparse.vstack([sparse.eye(G), A]).tocsc()
+            l = np.zeros((h.shape[0] + 1, 1))
+            u = np.zeros(l.shape)
+            u[:h.shape[0], 0] = h[:]
+
+            prob = osqp.OSQP()
+            prob.setup(P, q, G, l, u, verbose=False)
+            res = prob.solve()
+            alpha = res.x
+
+        elif self.solver == 'cvxopt':
+            P = matrix(P)
+            q = matrix(q)
+            G = matrix(G)
+            h = matrix(h)
+            A = matrix(A)
+            b = matrix(b)
+
+            solvers.options['show_progress'] = False
+            sol = solvers.qp(P, q, G, h, A, b)
+            alpha = np.array(sol['x']).reshape(P.shape[0])
+
+        return alpha
+
