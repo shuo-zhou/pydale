@@ -82,28 +82,33 @@ class ARSVM(BaseEstimator, TransformerMixin):
         self.eta =eta
         self.solver = solver
         self.n_neighbour = k
-        self.scaler = StandardScaler()
+        # self.scaler = StandardScaler()
 
-    def fit(self, Xs, ys, Xtl=None, Xtu=None, yt=None):
+    def fit(self, Xs, ys, Xtu, Xtl=None, yt=None):
         """
         solve min_x x^TPx + q^Tx, s.t. Gx<=h, Ax=b
         Parameters:
             Xs: Source data, array-like, shape (ns_samples, n_feautres)
-            Xtl: Labelled target data, array-like, shape (ntl_samples, n_feautres)
-            Xtu: Unlabelled target data,  array-like, shape (ntu_samples, n_feautres)
             ys: Source label, array-like, shape (ns_samples, )
+            Xtu: Unlabelled target data,  array-like, shape (ntu_samples, n_feautres)
+            Xtl: Labelled target data, array-like, shape (ntl_samples, n_feautres)
             yt: Target label, array-like, shape (ntl_samples, )
         """
 
         ns = Xs.shape[0]
-        ntl = Xtl.shape[0]
+        ntl = 0
+        if Xtl is not None:
+            ntl += Xtl.shape[0]
+            X = np.concatenate([Xs, Xtl, Xtu], axis=0)
+            y = np.concatenate([ys, yt])
+        else:
+            X = np.concatenate([Xs, Xtu], axis=0)
+            y = ys.copy()
+
+        n = X.shape[0]
         nt = ntl + Xtu.shape[0]
         nl = ns + ntl  # number of labelled data
-        
-        X = np.concatenate([Xs, Xtl, Xtu], axis=0)
-        X = self.scaler.fit_transform(X)
-        n = X.shape[0]
-        y = np.concatenate([ys, yt])
+        # X = self.scaler.fit_transform(X)
 
         e = np.zeros((n,1))
         e[:ns, 0] = 1.0 / ns
@@ -205,10 +210,12 @@ class ARSVM(BaseEstimator, TransformerMixin):
         return self
 
     def decision_function(self, X):
-        check_is_fitted(self, 'X')
-        check_is_fitted(self, 'y')
-        X_fit = self.X
-        K = get_kernel(self.scaler.transform(X), X_fit, kernel=self.kernel, **self.kwargs)
+        # check_is_fitted(self, 'X')
+        # check_is_fitted(self, 'y')
+        # X_fit = self.X
+        K = get_kernel(X, self.X, kernel=self.kernel, **self.kwargs)
+        # K = get_kernel(self.scaler.transform(X), X_fit,
+        #                kernel=self.kernel, **self.kwargs)
         return np.dot(K, self.coef_)  # +self.intercept_
 
     def predict(self, X):
@@ -216,10 +223,11 @@ class ARSVM(BaseEstimator, TransformerMixin):
         Parameters:
             X: array-like, shape (n_samples, n_feautres)
         Return:
-            predicted labels, array-like, shape (n_samples)
+            predicted labels, array-like, shape (n_samples, )
         """
         
-        return np.sign(self.decision_function(self.scaler.transform(X)))
+        # return np.sign(self.decision_function(self.scaler.transform(X)))
+        return np.sign(self.decision_function(X))
 
     def fit_predict(self, Xs, ys, Xtl=None, Xtu=None, yt=None):
         """
@@ -234,3 +242,124 @@ class ARSVM(BaseEstimator, TransformerMixin):
         self.fit(Xs, Xtl, Xtu, ys, yt)
         y_pred = self.predict(Xtu)
         return y_pred
+
+
+class ARRLS(BaseEstimator, TransformerMixin):
+    def __init__(self, kernel='linear', lambda_=1, eta=0, k=5, solver='osqp', **kwargs):
+        """
+        Init function
+        Parameters
+            kernel: 'rbf' | 'linear' | 'poly' (default is 'linear')
+            lambda_: MMD regulization param
+            eta: manifold regulization param
+            solver: osqp (default), cvxopt
+            kwargs: kernel param
+        """
+        self.kwargs = kwargs
+        self.kernel = kernel
+        self.lambda_ = lambda_
+        self.eta = eta
+        self.solver = solver
+        self.n_neighbour = k
+        self.classes = None
+        self.coef_ = None
+
+    def fit(self, Xs, ys, Xtu, Xtl=None, yt=None):
+        """
+        Parameters:
+            Xs: Source data, array-like, shape (ns_samples, n_feautres)
+            ys: Source label, array-like, shape (ns_samples, )
+            Xtu: Unlabelled target data,  array-like, shape (ntu_samples, n_feautres)
+            Xtl: Labelled target data, array-like, shape (ntl_samples, n_feautres)
+            yt: Target label, array-like, shape (ntl_samples, )
+        """
+        ns = Xs.shape[0]
+        ntl = 0
+        if Xtl is not None:
+            ntl += Xtl.shape[0]
+            X = np.concatenate([Xs, Xtl, Xtu], axis=0)
+            y = np.concatenate([ys, yt])
+        else:
+            X = np.concatenate([Xs, Xtu], axis=0)
+            y = ys.copy()
+
+        n = X.shape[0]
+        nt = ntl + Xtu.shape[0]
+        nl = ns + ntl  # number of labelled data
+        # X = self.scaler.fit_transform(X)
+
+        e = np.zeros((n, 1))
+        e[:ns, 0] = 1.0 / ns
+        e[ns:, 0] = -1.0 / nt
+        M = np.dot(e, e.T)
+
+        class_all = np.unique(ys)
+        if class_all.all() != np.unique(yt).all():
+            sys.exit('Source and target domain should have the same labels')
+
+        for c in class_all:
+            e1 = np.zeros([ns, 1])
+            e2 = np.zeros([nt, 1])
+            e1[np.where(ys == c)] = 1.0 / (np.where(ys == c)[0].shape[0])
+            e2[np.where(yt == c)[0]] = -1.0 / np.where(yt == c)[0].shape[0]
+            e = np.vstack((e1, e2))
+            e[np.where(np.isinf(e))[0]] = 0
+            M = M + np.dot(e, e.T)
+
+        I = np.eye(n)
+        # H = I - 1. / n * np.ones((n, n))
+        K = get_kernel(X, kernel=self.kernel, **self.kwargs)
+        K[np.isnan(K)] = 0
+
+        J = np.zeros((nl, n))
+        J[:nl, :n] = np.eye(nl)
+
+        y_ = np.zeros(n)
+        y_[:nl] = y[:]
+
+        Q_ = np.dot((J + self.lambda_ * M), K)
+
+        if self.mu3 != 0:
+            lapmat = get_lapmat(X, n_neighbour=self.k, mode=self.mode,
+                                metric=self.manifold_metric)
+            Q_ = Q_ + self.eta * np.dot(lapmat, K)
+
+        Q_inv = inv(Q_)
+
+        self.coef_ = np.dot(Q_inv, y_)
+
+        self.X = X
+        self.y = y
+
+        return self
+
+    def predict(self, X):
+        """
+        Parameters:
+            X: array-like, shape (n_samples, n_feautres)
+        Return:
+            predicted labels, array-like, shape (n_samples)
+        """
+        dec = self.decision_function(X)
+        if self.classes.shape[0] == 2:
+            y_pred = np.sign(dec)
+        else:
+            n_test = X.shape[0]
+            y_pred = np.zeros(n_test)
+            dec_sort = np.argsort(dec, axis=1)[:, ::-1]
+            for i in range(n_test):
+                y_pred[i] = self.classes[dec_sort[i, 0]]
+
+        return y_pred
+
+    def fit_predict(self, Xs, ys, Xtu, Xtl=None, yt=None):
+        """
+        Parameters:
+            Xs: Source data, array-like, shape (ns_samples, n_feautres)
+            ys: Source label, array-like, shape (ns_samples, )
+            Xtu: Unlabelled target data,  array-like, shape (ntu_samples, n_feautres)
+            Xtl: Labelled target data, array-like, shape (ntl_samples, n_feautres)
+            yt: Target label, array-like, shape (ntl_samples, )
+        """
+        self.fit(Xs, ys, Xtu, Xtl, yt)
+        return self.predict(Xtu)
