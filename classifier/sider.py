@@ -380,9 +380,7 @@ class SIDeRLS(BaseEstimator, TransformerMixin):
             lapmat = get_lapmat(X, n_neighbour=self.k, mode=self.mode,
                                 metric=self.manifold_metric)
             Q_ = Q_ + self.mu3 / np.square(n) * np.dot(lapmat, K)
-
         Q_inv = inv(Q_)
-
         self.coef_ = np.dot(Q_inv, y_)
 
         self.X = X

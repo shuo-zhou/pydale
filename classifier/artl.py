@@ -65,13 +65,13 @@ def get_lapmat(X, n_neighbour=5, metric='cosine', mode='distance',
 
 
 class ARSVM(BaseEstimator, TransformerMixin):
-    def __init__(self, C=1, kernel='linear', lambda_=1, eta=0, k=5, solver='osqp', **kwargs):
+    def __init__(self, C=1, kernel='linear', lambda_=1, gamma_=0, k=5, solver='osqp', **kwargs):
         """
         Init function
         Parameters
             kernel: 'rbf' | 'linear' | 'poly' (default is 'linear')
             lambda_: MMD regulization param
-            eta: manifold regulization param
+            gamma_: manifold regulization param
             solver: osqp (default), cvxopt
             kwargs: kernel param
         """
@@ -79,9 +79,10 @@ class ARSVM(BaseEstimator, TransformerMixin):
         self.kernel = kernel
         self.lambda_ = lambda_
         self.C = C
-        self.eta =eta
+        self.gamma_ = gamma_
         self.solver = solver
         self.n_neighbour = k
+        self.alpha = None
         # self.scaler = StandardScaler()
 
     def fit(self, Xs, ys, Xtu, Xtl=None, yt=None):
@@ -132,14 +133,16 @@ class ARSVM(BaseEstimator, TransformerMixin):
         # H = I - 1. / n * np.ones((n, n))
         K = get_kernel(X, kernel=self.kernel, **self.kwargs)
         K[np.isnan(K)] = 0
-    
-        L = get_lapmat(X, n_neighbour=self.n_neighbour)
 
         # dual
         Y = np.diag(y)
         J = np.zeros((nl, n))
         J[:nl, :n] = np.eye(nl)
-        Q_ = self.C * I + multi_dot([(self.lambda_ * M + self.eta/np.square(n) * L), K])
+        if self.gamma_ != 0:
+            L = get_lapmat(X, n_neighbour=self.n_neighbour)
+            Q_ = self.C * I + multi_dot([(self.lambda_ * M + self.gamma * L), K])
+        else:
+            Q_ = self.C * I + multi_dot([(self.lambda_ * M), K])
         Q = multi_dot([Y, J, K, inv(Q_), J.T, Y])
         q = -1 * np.ones((nl, 1))
 
@@ -245,20 +248,23 @@ class ARSVM(BaseEstimator, TransformerMixin):
 
 
 class ARRLS(BaseEstimator, TransformerMixin):
-    def __init__(self, kernel='linear', lambda_=1, eta=0, k=5, solver='osqp', **kwargs):
+    def __init__(self, kernel='linear', lambda_=1, gamma_=0, sigma_=1,
+                 k=5, solver='osqp', **kwargs):
         """
         Init function
         Parameters
             kernel: 'rbf' | 'linear' | 'poly' (default is 'linear')
-            lambda_: MMD regulization param
-            eta: manifold regulization param
+            lambda_: MMD regularisation param
+            gamma_: manifold regularisation param
+            sigma_: l2 regularisation param
             solver: osqp (default), cvxopt
             kwargs: kernel param
         """
         self.kwargs = kwargs
         self.kernel = kernel
         self.lambda_ = lambda_
-        self.eta = eta
+        self.gamma_ = gamma_
+        self.sigma_ = sigma_
         self.solver = solver
         self.n_neighbour = k
         self.classes = None
@@ -311,22 +317,21 @@ class ARRLS(BaseEstimator, TransformerMixin):
         K = get_kernel(X, kernel=self.kernel, **self.kwargs)
         K[np.isnan(K)] = 0
 
-        J = np.zeros((nl, n))
-        J[:nl, :n] = np.eye(nl)
+        E = np.zeros((n, n))
+        E[:nl, :nl] = np.eye(nl)
 
         y_ = np.zeros(n)
         y_[:nl] = y[:]
 
-        Q_ = np.dot((J + self.lambda_ * M), K)
-
-        if self.mu3 != 0:
-            lapmat = get_lapmat(X, n_neighbour=self.k, mode=self.mode,
-                                metric=self.manifold_metric)
-            Q_ = Q_ + self.eta * np.dot(lapmat, K)
-
+        if self.gamma_ != 0:
+            L = get_lapmat(X, n_neighbour=self.k, mode=self.mode,
+                           metric=self.manifold_metric)
+            Q_ = np.dot((E + self.lambda_ * M + self.gamma_ * L),
+                        K) + self.sigma_ * I
+        else:
+            Q_ = np.dot((E + self.lambda_ * M), K) + self.sigma_ * I
         Q_inv = inv(Q_)
-
-        self.coef_ = np.dot(Q_inv, y_)
+        self.coef_ = multi_dot(Q_inv, E, y_)
 
         self.X = X
         self.y = y
