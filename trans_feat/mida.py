@@ -10,6 +10,7 @@ from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.utils.validation import check_is_fitted
 from sklearn.neighbors import kneighbors_graph
 # =============================================================================
+# Maximum independence domain adaptation (MIDA)
 # Ref: Yan, K., Kou, L. and Zhang, D., 2018. Learning domain-invariant subspace 
 # using domain features and independence maximization. IEEE transactions on 
 # cybernetics, 48(1), pp.288-299.
@@ -112,7 +113,7 @@ class MIDA(BaseEstimator, TransformerMixin):
         X_transformed = np.dot(K, U_)
         return X_transformed
 
-    def fit_transform(self, X, D, y = None):
+    def fit_transform(self, X, D, y=None):
         """
         Parameters:
             X: array-like, shape (n_samples, n_feautres)

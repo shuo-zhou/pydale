@@ -15,31 +15,32 @@ from sklearn.utils.validation import check_is_fitted
 # International Conference on Computer Vision (ICCV), 2013.
 # =============================================================================
 
+
 class JDA(BaseEstimator, TransformerMixin):
     def __init__(self, n_components, kernel = 'linear', lambda_=1, **kwargs):
-        '''
+        """
         Init function
         Parameters
             n_components: n_componentss after tca (n_components <= d)
-            kernel_type: [‘rbf’, ‘sigmoid’, ‘polynomial’, ‘poly’, ‘linear’, 
+            kernel_type: [‘rbf’, ‘sigmoid’, ‘polynomial’, ‘poly’, ‘linear’,
             ‘cosine’] (default is 'linear')
             **kwargs: kernel param
             lambda_: regulization param
-        '''
+        """
         self.n_components = n_components
         self.kwargs = kwargs
         self.kernel = kernel
         self.lambda_ = lambda_
 
     def get_L(self, ns, nt):
-        '''
+        """
         Get kernel weight matrix
         Parameters:
             ns: source domain sample size
             nt: target domain sample size
-        Return: 
+        Return:
             Kernel weight matrix L
-        '''
+        """
         a = 1.0 / (ns * np.ones((ns, 1)))
         b = -1.0 / (nt * np.ones((nt, 1)))
         e = np.vstack((a, b))
@@ -47,31 +48,31 @@ class JDA(BaseEstimator, TransformerMixin):
         return L
 
     def get_kernel(self, X, Y=None):
-        '''
+        """
         Generate kernel matrix
         Parameters:
             X: X matrix (n1,d)
             Y: Y matrix (n2,d)
-        Return: 
+        Return:
             Kernel matrix
-        '''
+        """
 
         return pairwise_kernels(X, Y=Y, metric = self.kernel, 
                                 filter_params = True, **self.kwargs)
 
     def fit(self, Xs, Xt, ys, yt):
-        '''
+        """
         Parameters:
             Xs: Source domain data, array-like, shape (n_samples, n_feautres)
             Xt: Target domain data, array-like, shape (n_samples, n_feautres)
             ys: Labels of source domain samples, shape (n_samples,)
             yt: Labels of source domain samples, shape (n_samples,)
-        '''
+        """
         X = np.vstack((Xs, Xt))
-#        self.scaler = StandardScaler()
-#        self.scaler.fit(X)
-#        X = self.scaler.transform(X)
-        #X = np.dot(X.T, np.diag(1.0 / np.sqrt(np.sum(np.square(X), axis = 1)))).T 
+        # self.scaler = StandardScaler()
+        # self.scaler.fit(X)
+        # X = self.scaler.transform(X)
+        # X = np.dot(X.T, np.diag(1.0 / np.sqrt(np.sum(np.square(X), axis = 1)))).T
         ns = Xs.shape[0]
         nt = Xt.shape[0]
         n = ns + nt
@@ -117,7 +118,7 @@ class JDA(BaseEstimator, TransformerMixin):
         
         U = np.zeros(eig_vecs.shape)
 
-        U[:,:] = eig_vecs[:, idx_sorted]
+        U[:, :] = eig_vecs[:, idx_sorted]
         self.U = np.asarray(U, dtype = np.float)
         self.K = K
         self.Xs = Xs
@@ -127,12 +128,12 @@ class JDA(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X):
-        '''
+        """
         Parameters:
             X: array-like, shape (n_samples, n_feautres)
-        Return: 
+        Return:
             tranformed data
-        '''
+        """
 #        X = self.scaler.transform(X)
         check_is_fitted(self, 'Xs')
         check_is_fitted(self, 'Xt')
@@ -143,15 +144,15 @@ class JDA(BaseEstimator, TransformerMixin):
         return X_transformed
     
     def fit_transform(self, Xs, Xt, ys, yt):
-        '''
+        """
         Parameters:
             Xs: Source domain data, array-like, shape (n_samples, n_feautres)
             Xt: Target domain data, array-like, shape (n_samples, n_feautres)
             ys: Labels of source domain samples, shape (n_samples,)
             yt: Labels of source domain samples, shape (n_samples,)
-        Return: 
+        Return:
             tranformed Xs_transformed, Xt_transformed
-        '''
+        """
         self.fit(Xs, Xt, ys, yt)
         Xs_transformed = self.transform(Xs)
         Xt_transformed = self.transform(Xt)

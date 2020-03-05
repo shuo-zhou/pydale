@@ -7,7 +7,7 @@ from scipy.linalg import eig
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.utils.validation import check_is_fitted
-#from sklearn.preprocessing import StandardScaler
+
 # =============================================================================
 # Balanced Distribution Adaptation: BDA
 # Wang, J., Chen, Y., Hao, S., Feng, W. and Shen, Z., 2017, November. Balanced 
@@ -15,18 +15,19 @@ from sklearn.utils.validation import check_is_fitted
 # IEEE International Conference on (pp. 1129-1134). IEEE.
 # =============================================================================
 
-class JDA(BaseEstimator, TransformerMixin):
-    def __init__(self, n_components, kernel = 'linear', lambda_=1, mu = 0.5, **kwargs):
-        '''
+
+class BDA(BaseEstimator, TransformerMixin):
+    def __init__(self, n_components, kernel='linear', lambda_=1, mu=0.5, **kwargs):
+        """
         Init function
         Parameters
             n_components: n_componentss after tca (n_components <= d)
-            kernel_type: [‘rbf’, ‘sigmoid’, ‘polynomial’, ‘poly’, ‘linear’, 
+            kernel_type: [‘rbf’, ‘sigmoid’, ‘polynomial’, ‘poly’, ‘linear’,
             ‘cosine’] (default is 'linear')
             **kwargs: kernel param
             lambda_: regulization param
             mu: trade-off for marginal and conditional distribution mismatch
-        '''
+        """
         self.n_components = n_components
         self.kwargs = kwargs
         self.kernel = kernel
@@ -34,14 +35,14 @@ class JDA(BaseEstimator, TransformerMixin):
         self.mu = mu
 
     def get_L(self, ns, nt):
-        '''
+        """
         Get kernel weight matrix
         Parameters:
             ns: source domain sample size
             nt: target domain sample size
-        Return: 
+        Return:
             Kernel weight matrix L
-        '''
+        """
         a = 1.0 / (ns * np.ones((ns, 1)))
         b = -1.0 / (nt * np.ones((nt, 1)))
         e = np.vstack((a, b))
@@ -49,31 +50,31 @@ class JDA(BaseEstimator, TransformerMixin):
         return L
 
     def get_kernel(self, X, Y=None):
-        '''
+        """
         Generate kernel matrix
         Parameters:
             X: X matrix (n1,d)
             Y: Y matrix (n2,d)
-        Return: 
+        Return:
             Kernel matrix
-        '''
+        """
 
         return pairwise_kernels(X, Y=Y, metric = self.kernel, 
                                 filter_params = True, **self.kwargs)
 
     def fit(self, Xs, Xt, ys, yt):
-        '''
+        """
         Parameters:
             Xs: Source domain data, array-like, shape (n_samples, n_feautres)
             Xt: Target domain data, array-like, shape (n_samples, n_feautres)
             ys: Labels of source domain samples, shape (n_samples,)
             yt: Labels of source domain samples, shape (n_samples,)
-        '''
+        """
         X = np.vstack((Xs, Xt))
-#        self.scaler = StandardScaler()
-#        self.scaler.fit(X)
-#        X = self.scaler.transform(X)
-        #X = np.dot(X.T, np.diag(1.0 / np.sqrt(np.sum(np.square(X), axis = 1)))).T 
+        # self.scaler = StandardScaler()
+        # self.scaler.fit(X)
+        # X = self.scaler.transform(X)
+        # X = np.dot(X.T, np.diag(1.0 / np.sqrt(np.sum(np.square(X), axis = 1)))).T
         ns = Xs.shape[0]
         nt = Xt.shape[0]
         n = ns + nt
@@ -119,8 +120,8 @@ class JDA(BaseEstimator, TransformerMixin):
         idx_sorted = np.argsort(ev_abs)
         U = np.zeros((eig_vecs.shape[0], self.n_components))
 
-        U[:,:] = eig_vecs[:, idx_sorted]
-        self.U = np.asarray(U, dtype = np.float)
+        U[:, :] = eig_vecs[:, idx_sorted]
+        self.U = np.asarray(U, dtype=np.float)
       
         self.Xs = Xs
         self.Xt = Xt
@@ -128,12 +129,12 @@ class JDA(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X):
-        '''
+        """
         Parameters:
             X: array-like, shape (n_samples, n_feautres)
-        Return: 
+        Return:
             tranformed data
-        '''
+        """
 #        X = self.scaler.transform(X)
         check_is_fitted(self, 'Xs')
         check_is_fitted(self, 'Xt')
@@ -144,15 +145,15 @@ class JDA(BaseEstimator, TransformerMixin):
         return X_transformed
     
     def fit_transform(self, Xs, Xt, ys, yt):
-        '''
+        """
         Parameters:
             Xs: Source domain data, array-like, shape (n_samples, n_feautres)
             Xt: Target domain data, array-like, shape (n_samples, n_feautres)
             ys: Labels of source domain samples, shape (n_samples,)
             yt: Labels of source domain samples, shape (n_samples,)
-        Return: 
+        Return:
             tranformed Xs_transformed, Xt_transformed
-        '''
+        """
         self.fit(Xs, Xt, ys, yt)
         Xs_transformed = self.transform(Xs)
         Xt_transformed = self.transform(Xt)

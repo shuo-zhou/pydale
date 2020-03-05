@@ -19,7 +19,7 @@ from cvxopt import matrix, solvers
 import osqp
 
 # =============================================================================
-# Joint Distribution Adaptation: JDA
+# Adaptation Regularisation Transfer Learning: ARTL
 # Ref: Long, M., Wang, J., Ding, G., Pan, S.J. and Philip, S.Y., 2013. 
 # Adaptation regularization: A general framework for transfer learning. 
 # IEEE Transactions on Knowledge and Data Engineering, 26(5), pp.1076-1089.
@@ -65,7 +65,8 @@ def get_lapmat(X, n_neighbour=5, metric='cosine', mode='distance',
 
 
 class ARSVM(BaseEstimator, TransformerMixin):
-    def __init__(self, C=1, kernel='linear', lambda_=1, gamma_=0, k=5, solver='osqp', **kwargs):
+    def __init__(self, C=1, kernel='linear', lambda_=1, gamma_=0, k=5, 
+                 solver='osqp', **kwargs):
         """
         Init function
         Parameters
@@ -117,14 +118,15 @@ class ARSVM(BaseEstimator, TransformerMixin):
         M = np.dot(e, e.T)
 
         class_all = np.unique(ys)
-        if class_all.all() != np.unique(yt).all():
+        if yt is not None and class_all.all() != np.unique(yt).all():
             sys.exit('Source and target domain should have the same labels')
 
         for c in class_all:
             e1 = np.zeros([ns, 1])
-            e2 = np.zeros([nt, 1])
             e1[np.where(ys == c)] = 1.0 / (np.where(ys == c)[0].shape[0])
-            e2[np.where(yt == c)[0]] = -1.0 / np.where(yt == c)[0].shape[0]
+            e2 = np.zeros([nt, 1])
+            if yt is not None:
+                e2[np.where(yt == c)[0]] = -1.0 / np.where(yt == c)[0].shape[0]
             e = np.vstack((e1, e2))
             e[np.where(np.isinf(e))[0]] = 0
             M = M + np.dot(e, e.T)
@@ -137,10 +139,10 @@ class ARSVM(BaseEstimator, TransformerMixin):
         # dual
         Y = np.diag(y)
         J = np.zeros((nl, n))
-        J[:nl, :n] = np.eye(nl)
+        J[:nl, :nl] = np.eye(nl)
         if self.gamma_ != 0:
             L = get_lapmat(X, n_neighbour=self.n_neighbour)
-            Q_ = self.C * I + multi_dot([(self.lambda_ * M + self.gamma * L), K])
+            Q_ = self.C * I + multi_dot([(self.lambda_ * M + self.gamma_ * L), K])
         else:
             Q_ = self.C * I + multi_dot([(self.lambda_ * M), K])
         Q = multi_dot([Y, J, K, inv(Q_), J.T, Y])
