@@ -65,8 +65,8 @@ def get_lapmat(X, n_neighbour=5, metric='cosine', mode='distance',
 
 
 class ARSVM(BaseEstimator, TransformerMixin):
-    def __init__(self, C=1, kernel='linear', lambda_=1, gamma_=0, k=5, 
-                 solver='osqp', **kwargs):
+    def __init__(self, C=1, kernel='linear', lambda_=1, gamma_=0, k=5, solver='osqp', 
+                 manifold_metric='cosine', knn_mode='distance', **kwargs):
         """
         Init function
         Parameters
@@ -84,6 +84,7 @@ class ARSVM(BaseEstimator, TransformerMixin):
         self.solver = solver
         self.n_neighbour = k
         self.alpha = None
+        self.mode = knn_mode
         # self.scaler = StandardScaler()
 
     def fit(self, Xs, ys, Xtu, Xtl=None, yt=None):
@@ -250,8 +251,8 @@ class ARSVM(BaseEstimator, TransformerMixin):
 
 
 class ARRLS(BaseEstimator, TransformerMixin):
-    def __init__(self, kernel='linear', lambda_=1, gamma_=0, sigma_=1,
-                 k=5, solver='osqp', **kwargs):
+    def __init__(self, kernel='linear', lambda_=1, gamma_=0, sigma_=1, k=5, 
+                 manifold_metric='cosine', knn_mode='distance', **kwargs):
         """
         Init function
         Parameters
@@ -267,10 +268,11 @@ class ARRLS(BaseEstimator, TransformerMixin):
         self.lambda_ = lambda_
         self.gamma_ = gamma_
         self.sigma_ = sigma_
-        self.solver = solver
         self.n_neighbour = k
         self.classes = None
         self.coef_ = None
+        self.mode = knn_mode
+        self.manifold_metric = manifold_metric
 
     def fit(self, Xs, ys, Xtu, Xtl=None, yt=None):
         """
@@ -295,6 +297,7 @@ class ARRLS(BaseEstimator, TransformerMixin):
         nt = ntl + Xtu.shape[0]
         nl = ns + ntl  # number of labelled data
         # X = self.scaler.fit_transform(X)
+        self.classes = np.unique(y)
 
         e = np.zeros((n, 1))
         e[:ns, 0] = 1.0 / ns
@@ -302,14 +305,15 @@ class ARRLS(BaseEstimator, TransformerMixin):
         M = np.dot(e, e.T)
 
         class_all = np.unique(ys)
-        if class_all.all() != np.unique(yt).all():
+        if yt is not None and class_all.all() != np.unique(yt).all():
             sys.exit('Source and target domain should have the same labels')
 
         for c in class_all:
             e1 = np.zeros([ns, 1])
             e2 = np.zeros([nt, 1])
             e1[np.where(ys == c)] = 1.0 / (np.where(ys == c)[0].shape[0])
-            e2[np.where(yt == c)[0]] = -1.0 / np.where(yt == c)[0].shape[0]
+            if yt is not None:
+                e2[np.where(yt == c)[0]] = -1.0 / np.where(yt == c)[0].shape[0]
             e = np.vstack((e1, e2))
             e[np.where(np.isinf(e))[0]] = 0
             M = M + np.dot(e, e.T)
@@ -326,14 +330,14 @@ class ARRLS(BaseEstimator, TransformerMixin):
         y_[:nl] = y[:]
 
         if self.gamma_ != 0:
-            L = get_lapmat(X, n_neighbour=self.k, mode=self.mode,
+            L = get_lapmat(X, n_neighbour=self.n_neighbour, mode=self.mode,
                            metric=self.manifold_metric)
             Q_ = np.dot((E + self.lambda_ * M + self.gamma_ * L),
                         K) + self.sigma_ * I
         else:
             Q_ = np.dot((E + self.lambda_ * M), K) + self.sigma_ * I
         Q_inv = inv(Q_)
-        self.coef_ = multi_dot(Q_inv, E, y_)
+        self.coef_ = multi_dot([Q_inv, E, y_])
 
         self.X = X
         self.y = y
@@ -358,6 +362,20 @@ class ARRLS(BaseEstimator, TransformerMixin):
                 y_pred[i] = self.classes[dec_sort[i, 0]]
 
         return y_pred
+
+    def decision_function(self, X):
+        """
+        Parameters:
+            X: array-like, shape (n_samples, n_feautres)
+        Return:
+            prediction scores, array-like, shape (n_samples)
+        """
+        # check_is_fitted(self, 'X')
+        # check_is_fitted(self, 'y')
+        # K = get_kernel(self.scaler.transform(X), self.X,
+        #                kernel=self.kernel, **self.kwargs)
+        K = get_kernel(X, self.X, kernel=self.kernel, **self.kwargs)
+        return np.dot(K, self.coef_)  
 
     def fit_predict(self, Xs, ys, Xtu, Xtl=None, yt=None):
         """
