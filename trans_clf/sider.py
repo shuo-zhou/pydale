@@ -5,9 +5,6 @@ Created on Mon Feb 25 11:15:26 2019
 Ref: Zhou, S., Li, W., Cox, C.R. and Lu, H., 2020. Side Information Dependence
  as a Regulariser for Analyzing Human Brain Conditions across Cognitive Experiments.
  In Proceedings of the 34th AAAI Conference on Artificial Intelligence (AAAI 2020).
-
- SIDeRSVM support both binary and multi-class classification
- SIDeRLS only support binary classification, multi-class coming soon
 """
 
 import sys
@@ -78,9 +75,10 @@ def get_lapmat(X, n_neighbour=3, metric='cosine', mode='distance',
 def multi2binary(y, y_i):
     """
     convert multi-class labels to binary
-    :param y: original labels, array-like, shape (n_samples,)
-    :param y_i: positive class label, int
-    :return: binary class labels, array-like, shape (n_samples,)
+    Parameters
+        y: original labels, array-like, shape (n_samples,)
+        y_i: positive class label, int
+    Return: binary class labels, array-like, shape (n_samples,)
     """
     new_y = np.ones(y.shape)
     new_y[np.where(y != y_i)] = -1
@@ -349,7 +347,7 @@ class SIDeRLS(BaseEstimator, TransformerMixin):
             X_test: Testing data, array-like, shape (n_test_samples, n_feautres)
             D_test: Domain covariate matrix for testing data, array-like, shape (n_test_samples, n_covariates)
         Return:
-            fitted model
+            self
         """
         n_train = X_train.shape[0]
         if X_test is not None and D_test is not None:
@@ -365,9 +363,7 @@ class SIDeRLS(BaseEstimator, TransformerMixin):
         K[np.isnan(K)] = 0
 
         self.classes = np.unique(y)
-        # n_class = self.classes.shape[0]
-        y_ = np.zeros(n)
-        y_[:n_train] = y[:]
+        n_class = self.classes.shape[0]
 
         J = np.zeros((n, n))
         J[:n_train, :n_train] = np.eye(n_train)
@@ -381,12 +377,26 @@ class SIDeRLS(BaseEstimator, TransformerMixin):
                                 metric=self.manifold_metric)
             Q_ = Q_ + self.mu3 / np.square(n) * np.dot(lapmat, K)
         Q_inv = inv(Q_)
-        self.coef_ = np.dot(Q_inv, y_)
 
+        if n_class == 2:
+            self.coef_ = self.solve(Q_inv, y)
+        else:
+            coefs_ = []
+            for i in range(n_class):
+                y_temp = multi2binary(y, self.classes[i])
+                coefs_.append(self.solve(Q_inv), y_temp)
+            self.coef_ = np.concatenate(coefs_, axis=1)
         self.X = X
         self.y = y
 
         return self
+
+    def solve(self, Q_inv, y):
+        n = Q_inv.shape[0]
+        n_train = y.shape[0]
+        y_ = np.zeros(n)
+        y_[:n_train] = y[:]
+        return np.dot(Q_inv, y_)
 
     def decision_function(self, X):
         """
