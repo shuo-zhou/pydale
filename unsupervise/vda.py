@@ -6,12 +6,13 @@ import sys
 from scipy.linalg import eig
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import pairwise_kernels
-from sklearn.utils.validation import check_is_fitted
+# from sklearn.utils.validation import check_is_fitted
 # =============================================================================
 # Visual Domain Adaptation: VDA
 # Tahmoresnezhad, J. and Hashemi, S., 2017. Visual domain adaptation via transfer 
 # feature learning. Knowledge and Information Systems, 50(2), pp.585-605.
 # =============================================================================
+
 
 class VDA(BaseEstimator, TransformerMixin):
     def __init__(self, n_components, kernel ='linear', lambda_=1, **kwargs):
@@ -136,12 +137,12 @@ class VDA(BaseEstimator, TransformerMixin):
         Return: 
             tranformed data
         '''
-        #X = self.scaler.transform(X)
-        check_is_fitted(self, 'Xs')
-        check_is_fitted(self, 'Xt')
+        # X = self.scaler.transform(X)
+        # check_is_fitted(self, 'Xs')
+        # check_is_fitted(self, 'Xt')
         X_fit = np.vstack((self.Xs, self.Xt))
         K = self.get_kernel(X, X_fit)
-        U_ = self.U[:,:self.n_components]
+        U_ = self.U[:, :self.n_components]
         X_transformed = np.dot(K, U_)
         return X_transformed
     

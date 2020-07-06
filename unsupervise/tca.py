@@ -7,7 +7,7 @@ from scipy.linalg import eig
 from numpy.linalg import multi_dot
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import pairwise_kernels
-from sklearn.utils.validation import check_is_fitted
+# from sklearn.utils.validation import check_is_fitted
 from sklearn.neighbors import kneighbors_graph
 # =============================================================================
 # Transfer Component Analysis: TCA
@@ -134,11 +134,11 @@ class TCA(BaseEstimator, TransformerMixin):
         Return:
             tranformed data
         """
-        check_is_fitted(self, 'Xs')
-        check_is_fitted(self, 'Xt')
+        # check_is_fitted(self, 'Xs')
+        # check_is_fitted(self, 'Xt')
         X_fit = np.vstack((self.Xs, self.Xt))
         K = get_kernel(X, X_fit, kernel = self.kernel, **self.kwargs)
-        U_ = self.U[:,:self.n_components]
+        U_ = self.U[:, :self.n_components]
         X_transformed = np.dot(K, U_)
         return X_transformed
 

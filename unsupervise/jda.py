@@ -6,8 +6,8 @@ import numpy as np
 from scipy.linalg import eig
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import pairwise_kernels
-from sklearn.utils.validation import check_is_fitted
-#from sklearn.preprocessing import StandardScaler
+# from sklearn.utils.validation import check_is_fitted
+# from sklearn.preprocessing import StandardScaler
 # =============================================================================
 # Joint Distribution Adaptation: JDA
 # Ref: Mingsheng Long, Jianmin Wang, Guiguang Ding, Jiaguang Sun, Philip S. Yu,
@@ -134,12 +134,12 @@ class JDA(BaseEstimator, TransformerMixin):
         Return:
             tranformed data
         """
-#        X = self.scaler.transform(X)
-        check_is_fitted(self, 'Xs')
-        check_is_fitted(self, 'Xt')
+        # X = self.scaler.transform(X)
+        # check_is_fitted(self, 'Xs')
+        # check_is_fitted(self, 'Xt')
         X_fit = np.vstack((self.Xs, self.Xt))
         K = self.get_kernel(X, X_fit)
-        U_ = self.U[:,:self.n_components]
+        U_ = self.U[:, :self.n_components]
         X_transformed = np.dot(K, U_)
         return X_transformed
     
