@@ -6,27 +6,36 @@ import numpy as np
 from scipy.linalg import eig
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import pairwise_kernels
-from sklearn.utils.validation import check_is_fitted
-
+from ..utils.mmd import mmd_coef
+# from sklearn.preprocessing import StandardScaler
 # =============================================================================
-# Balanced Distribution Adaptation: BDA
-# Wang, J., Chen, Y., Hao, S., Feng, W. and Shen, Z., 2017, November. Balanced 
-# distribution adaptation for transfer learning. In Data Mining (ICDM), 2017 
+# Python of three transfer learning methods:
+#   1. Transfer Component Analysis: TCA
+#   2. Joint Distribution Adaptation: JDA
+#   3. Balanced Distribution Adaptation: BDA
+# Ref:
+# [1] S. J. Pan, I. W. Tsang, J. T. Kwok and Q. Yang, "Domain Adaptation via
+# Transfer Component Analysis," in IEEE Transactions on Neural Networks,
+# vol. 22, no. 2, pp. 199-210, Feb. 2011.
+# [2] Mingsheng Long, Jianmin Wang, Guiguang Ding, Jiaguang Sun, Philip S. Yu,
+# Transfer Feature Learning with Joint Distribution Adaptation, IEEE 
+# International Conference on Computer Vision (ICCV), 2013.
+# [3] Wang, J., Chen, Y., Hao, S., Feng, W. and Shen, Z., 2017, November. Balanced
+# distribution adaptation for transfer learning. In Data Mining (ICDM), 2017
 # IEEE International Conference on (pp. 1129-1134). IEEE.
 # =============================================================================
 
 
-class BDA(BaseEstimator, TransformerMixin):
-    def __init__(self, n_components, kernel='linear', lambda_=1, mu=0.5, **kwargs):
+class JDA(BaseEstimator, TransformerMixin):
+    def __init__(self, n_components, kernel='linear', lambda_=1, mu=1, **kwargs):
         """
-        Init function
         Parameters
-            n_components: n_componentss after tca (n_components <= d)
+            n_components: n_componentss after (n_components <= min(d, n))
             kernel_type: [‘rbf’, ‘sigmoid’, ‘polynomial’, ‘poly’, ‘linear’,
             ‘cosine’] (default is 'linear')
             **kwargs: kernel param
-            lambda_: regulization param
-            mu: trade-off for marginal and conditional distribution mismatch
+            lambda_: regulisation param
+            mu: >= 0, param for conditional mmd, (mu=0 for TCA, mu=1 for JDA, BDA otherwise)
         """
         self.n_components = n_components
         self.kwargs = kwargs
@@ -34,35 +43,7 @@ class BDA(BaseEstimator, TransformerMixin):
         self.lambda_ = lambda_
         self.mu = mu
 
-    def get_L(self, ns, nt):
-        """
-        Get kernel weight matrix
-        Parameters:
-            ns: source domain sample size
-            nt: target domain sample size
-        Return:
-            Kernel weight matrix L
-        """
-        a = 1.0 / (ns * np.ones((ns, 1)))
-        b = -1.0 / (nt * np.ones((nt, 1)))
-        e = np.vstack((a, b))
-        L = np.dot(e, e.T)
-        return L
-
-    def get_kernel(self, X, Y=None):
-        """
-        Generate kernel matrix
-        Parameters:
-            X: X matrix (n1,d)
-            Y: Y matrix (n2,d)
-        Return:
-            Kernel matrix
-        """
-
-        return pairwise_kernels(X, Y=Y, metric = self.kernel, 
-                                filter_params = True, **self.kwargs)
-
-    def fit(self, Xs, Xt, ys, yt):
+    def fit(self, Xs, Xt, ys=None, yt=None):
         """
         Parameters:
             Xs: Source domain data, array-like, shape (n_samples, n_feautres)
@@ -71,40 +52,18 @@ class BDA(BaseEstimator, TransformerMixin):
             yt: Labels of source domain samples, shape (n_samples,)
         """
         X = np.vstack((Xs, Xt))
-        # self.scaler = StandardScaler()
-        # self.scaler.fit(X)
-        # X = self.scaler.transform(X)
-        # X = np.dot(X.T, np.diag(1.0 / np.sqrt(np.sum(np.square(X), axis = 1)))).T
+
         ns = Xs.shape[0]
         nt = Xt.shape[0]
         n = ns + nt
-        class_all = np.unique(ys)
-        if class_all.all() != np.unique(yt).all():
-            sys.exit('Source and target domain should have the same labels')
-        C = len(class_all)
-    
-        # Construct MMD kernel weight matrix
-        L = self.get_L(ns, nt) * C
-        L = (1-self.mu) * L
-    
-        # Within class MMD kernel weight matrix
-        if len(yt) != 0 and len(yt) == nt:
-            for c in class_all:
-                e1 = np.zeros([ns, 1])
-                e2 = np.zeros([nt, 1])
-                e1[np.where(ys == c)] = 1.0 / (np.where(ys == c)[0].shape[0])
-                e2[np.where(yt == c)[0]] = -1.0 / np.where(yt == c)[0].shape[0]
-                e = np.vstack((e1, e2))
-                e[np.where(np.isinf(e))[0]] = 0
-                L = L + self.mu * np.dot(e, e.T)
+        if ys is not None and yt is not None:
+            L = mmd_coef(ns, nt, ys, yt, kind='joint', mu=self.mu)
         else:
-            sys.exit('Target domain data and label should have the same size!')
-    
-        divider = np.sqrt(np.sum(np.diag(np.dot(L.T, L))))
-        L = L / divider
-        
+            L = mmd_coef(ns, nt, kind='marginal', mu=0)
+
         # Construct kernel matrix
-        K = self.get_kernel(X, None)
+        K = pairwise_kernels(X, kernel=self.kernel, **self.kwargs)
+        K[np.isnan(K)] = 0
     
         # Construct centering matrix
         H = np.eye(n) - 1.0 / (n * np.ones([n, n]))
@@ -118,14 +77,13 @@ class BDA(BaseEstimator, TransformerMixin):
         ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
 #        idx_sorted = np.argsort(ev_abs)[:self.n_components]
         idx_sorted = np.argsort(ev_abs)
-        U = np.zeros((eig_vecs.shape[0], self.n_components))
-
+        
+        U = np.zeros(eig_vecs.shape)
         U[:, :] = eig_vecs[:, idx_sorted]
         self.U = np.asarray(U, dtype=np.float)
-      
         self.Xs = Xs
         self.Xt = Xt
-      
+
         return self
     
     def transform(self, X):
@@ -135,16 +93,16 @@ class BDA(BaseEstimator, TransformerMixin):
         Return:
             tranformed data
         """
-#        X = self.scaler.transform(X)
-        check_is_fitted(self, 'Xs')
-        check_is_fitted(self, 'Xt')
+        # X = self.scaler.transform(X)
+        # check_is_fitted(self, 'Xs')
+        # check_is_fitted(self, 'Xt')
         X_fit = np.vstack((self.Xs, self.Xt))
-        K = self.get_kernel(X, X_fit)
-        U_ = self.U[:,:self.n_components]
+        K = pairwise_kernels(X, X_fit, kernel=self.kernel, **self.kwargs)
+        U_ = self.U[:, :self.n_components]
         X_transformed = np.dot(K, U_)
         return X_transformed
     
-    def fit_transform(self, Xs, Xt, ys, yt):
+    def fit_transform(self, Xs, Xt, ys=None, yt=None):
         """
         Parameters:
             Xs: Source domain data, array-like, shape (n_samples, n_feautres)
