@@ -51,7 +51,7 @@ class MIDA(BaseEstimator, TransformerMixin):
         """
         
         n = X.shape[0]
-        K = pairwise_kernels(X, kernel=self.kernel, **self.kwargs)
+        K = pairwise_kernels(X, metric=self.kernel, **self.kwargs)
         K[np.isnan(K)] = 0
         
         I = np.eye(n)
@@ -91,7 +91,7 @@ class MIDA(BaseEstimator, TransformerMixin):
         """
         check_is_fitted(self, 'X')
         X_fit = self.X
-        K = pairwise_kernels(X, X_fit, kernel=self.kernel, **self.kwargs)
+        K = pairwise_kernels(X, X_fit, metric=self.kernel, **self.kwargs)
         U_ = self.U[:, :self.n_components]
         X_transformed = np.dot(K, U_)
         return X_transformed

@@ -5,14 +5,15 @@ import sys
 import numpy as np
 
 
-def mmd_coef(ns, nt, ys=None, yt=None, kind='marginal', mu=1):
+def mmd_coef(ns, nt, ys=None, yt=None, kind='marginal', mu=0.5):
     n = ns + nt
     e = np.zeros((n, 1))
     e[:ns, 0] = 1.0 / ns
     e[ns:, 0] = -1.0 / nt
-    M = np.dot(e, e.T)
+    M = np.dot(e, e.T)  # marginal mmd coefficients
 
     if kind == 'joint' and ys is not None:
+        Mc = 0  # conditional mmd coefficients
         class_all = np.unique(ys)
         if yt is not None and class_all.all() != np.unique(yt).all():
             sys.exit('Source and target domain should have the same labels')
@@ -25,6 +26,6 @@ def mmd_coef(ns, nt, ys=None, yt=None, kind='marginal', mu=1):
                 et[np.where(yt == c)[0]] = -1.0 / np.where(yt == c)[0].shape[0]
             e = np.vstack((es, et))
             e[np.where(np.isinf(e))[0]] = 0
-            M = M + mu * np.dot(e, e.T)
-
+            Mc = Mc + mu * np.dot(e, e.T)
+        M = mu * M + (1-mu) * Mc  # joint mmd coefficients
     return M

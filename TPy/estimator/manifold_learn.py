@@ -56,12 +56,37 @@ def lapnorm(X, n_neighbour=3, metric='cosine', mode='distance',
     return lapmat
 
 
-def semi_binary_dual(K, y_, Q_inv, C, solver='osqp'):
+def solve_semi_dual(K, y, Q_, C, solver='osqp'):
+    if len(y.shape) == 1:
+        coef_, support_ = semi_binary_dual(K, y, Q_, C, solver)
+    else:
+        coef_list = []
+        support_ = []
+        for i in range(y.shape[1]):
+            coef, support = semi_binary_dual(K, y[:, i], Q_, C, solver)
+            coef_list.append(coef.reshape(-1, 1))
+            support_.append(support)
+
+        coef_ = np.concatenate(coef_list, axis=1)
+
+    return coef_, support_
+
+
+def semi_binary_dual(K, y_, Q_, C, solver='osqp'):
+    """
+    Construct & solve quraprog problem
+    :param K:
+    :param y_:
+    :param Q_:
+    :param C:
+    :param solver:
+    :return:
+    """
     nl = y_.shape[0]
     n = K.shape[0]
     J = np.zeros((nl, n))
     J[:nl, :nl] = np.eye(nl)
-
+    Q_inv = inv(Q_)
     Y = np.diag(y_.reshape(-1))
     Q = multi_dot([Y, J, K, Q_inv, J.T, Y])
     Q = Q.astype('float32')
@@ -123,20 +148,17 @@ def _quadprog(Q, y, C, solver='osqp'):
     return alpha
 
 
-def semi_binary_ls(Q_inv, y):
-    n = Q_inv.shape[0]
+def solve_semi_ls(Q, y):
+    n = Q.shape[0]
     nl = y.shape[0]
-    y_ = np.zeros(n)
-    y_[:nl] = y[:]
-    return np.dot(Q_inv, y_)
-
-
-def cat_x(Xl, Xu=None):
-    if Xu is not None:
-        X = np.concatenate([Xl, Xu], axis=0)
+    Q_inv = inv(Q)
+    if len(y.shape) == 1:
+        y_ = np.zeros(n)
+        y_[:nl] = y[:]
     else:
-        X = Xl
-    return X
+        y_ = np.zeros((n, y.shape[1]))
+        y_[:nl, :] = y[:, :]
+    return np.dot(Q_inv, y_)
 
 
 class LapSVM(BaseEstimator, TransformerMixin):
@@ -163,19 +185,16 @@ class LapSVM(BaseEstimator, TransformerMixin):
         self.knn_mode = knn_mode
         self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
 
-    def fit(self, Xl, y, Xu=None):
+    def fit(self, X, y):
         """
         Parameters:
-            Xl: Labelled data, array-like, shape (nl_samples, n_feautres)
-            y: labels, array-like, shape (nl_samples,)
-            Xu: Unlabelled data, array-like, shape (nu_samples, n_feautres
+            X: Input data, array-like, shape (n_samples, n_feautres)
+            y: Label, array-like, shape (nl_samples, ), where nl_samples <= n_samples
         Return:
             self
         """
-        nl = y.shape[0]
-        X = cat_x(Xl, Xu)
         n = X.shape[0]
-
+        nl = y.shape[0]
         K = pairwise_kernels(X, metric=self.kernel, **self.kwargs)
         K[np.isnan(K)] = 0
 
@@ -185,27 +204,18 @@ class LapSVM(BaseEstimator, TransformerMixin):
         else:
             L = lapnorm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode)
             Q_ = I + self.gamma_ * np.dot(L, K)
-        Q_inv = inv(Q_)
 
         y_ = self._lb.fit_transform(y)
-        if self._lb.classes_.shape[0] == 2:
-            self.coef_, self.support_ = semi_binary_dual(K, y_, Q_inv,
-                                                         self.C, self.solver)
+        self.coef_, self.support_ = solve_semi_dual(K, y_, Q_, self.C, self.solver)
+        if self._lb.y_type_ == 'binary':
             self.support_vectors_ = X[:nl, :][self.support_]
             self.n_support_ = self.support_vectors_.shape[0]
         else:
-            coef_list = []
-            self.support_ = []
             self.support_vectors_ = []
             self.n_support_ = []
             for i in range(y_.shape[1]):
-                coef_, support_ = semi_binary_dual(K, y_[:, i], Q_inv,
-                                                   self.C, self.solver)
-                coef_list.append(coef_.reshape(-1, 1))
-                self.support_.append(support_)
-                self.support_vectors_.append(X[:nl, :][support_][-1])
+                self.support_vectors_.append(X[:nl, :][self.support_[i]][-1])
                 self.n_support_.append(self.support_vectors_[-1].shape[0])
-            self.coef_ = np.concatenate(coef_list, axis=1)
 
         self.X = X
         self.y = y
@@ -235,31 +245,22 @@ class LapSVM(BaseEstimator, TransformerMixin):
             predicted labels, array-like, shape (n_samples, )
         """
         dec = self.decision_function(X)
-        n_class = self._lb.classes_.shape[0]
-        if n_class == 2:
+        if self._lb.y_type_ == 'binary':
             y_pred_ = np.sign(dec).reshape(-1, 1)
         else:
             y_pred_ = score2pred(dec)
 
         return self._lb.inverse_transform(y_pred_)
 
-    def fit_predict(self, Xs, ys, Xt, yt=None):
+    def fit_predict(self, X, y):
         """
         solve min_x x^TPx + q^Tx, s.t. Gx<=h, Ax=b
         Parameters:
-            Xs: Source data, array-like, shape (ns_samples, n_feautres)
-            ys: Source label, array-like, shape (ns_samples, )
-            Xt: Target data, array-like, shape (nt_samples, n_feautres),
-                the first ntl samples are labelled if yt is not None
-            yt: Target label, array-like, shape (ntl_samples, )
+            X: Input data, array-like, shape (n_samples, n_feautres)
+            y: Label, array-like, shape (nl_samples, ), where nl_samples <= n_samples
         """
-        self.fit(Xs, ys, Xt, yt)
-        if yt is not None:
-            ntl = yt.shape[0]
-            Xtest = Xt[ntl:, :]
-        else:
-            Xtest = Xt
-        return self.predict(Xtest)
+        self.fit(X, y)
+        return self.predict(X)
 
 
 class LapRLS(BaseEstimator, TransformerMixin):
@@ -272,7 +273,7 @@ class LapRLS(BaseEstimator, TransformerMixin):
             gamma_: manifold regularisation param
             sigma_: l2 regularisation param
             solver: osqp (default), cvxopt
-            kwargs: kernel param
+            kwargs: kernel params
         """
         self.kwargs = kwargs
         self.kernel = kernel
@@ -284,19 +285,14 @@ class LapRLS(BaseEstimator, TransformerMixin):
         self.manifold_metric = manifold_metric
         self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
 
-    def fit(self, Xl, y, Xu=None):
+    def fit(self, X, y):
         """
         Parameters:
-            Xs: Source data, array-like, shape (ns_samples, n_feautres)
-            ys: Source label, array-like, shape (ns_samples, )
-            Xt: Unlabelled target data,  array-like, shape (ntu_samples, n_feautres)
-            Xtl: Labelled target data, array-like, shape (ntl_samples, n_feautres)
-            yt: Target label, array-like, shape (ntl_samples, )
+            X: Input data, array-like, shape (n_samples, n_feautres)
+            y: Label, array-like, shape (nl_samples, ), where nl_samples <= n_samples
         """
-        nl = y.shape[0]
-        X = cat_x(Xl, Xu)
         n = X.shape[0]
-
+        nl = y.shape[0]
         I = np.eye(n)
         K = pairwise_kernels(X, metric=self.kernel, **self.kwargs)
         K[np.isnan(K)] = 0
@@ -310,16 +306,10 @@ class LapRLS(BaseEstimator, TransformerMixin):
             Q_ = np.dot((J + self.gamma_ * L), K) + self.sigma_ * I
         else:
             Q_ = np.dot(J, K) + self.sigma_ * I
-        Q_inv = inv(Q_)
 
         y_ = self._lb.fit_transform(y)
-        if self._lb.classes_.shape[0] == 2:
-            self.coef_ = semi_binary_ls(Q_inv, y_)
-        else:
-            coefs_ = []
-            for i in range(y_.shape[1]):
-                coefs_.append(semi_binary_ls(Q_inv, y_[:, i]).reshape(-1, 1))
-            self.coef_ = np.concatenate(coefs_, axis=1)
+        self.coef_ = solve_semi_ls(Q_, y_)
+
         self.X = X
         self.y = y
 
@@ -333,8 +323,7 @@ class LapRLS(BaseEstimator, TransformerMixin):
             predicted labels, array-like, shape (n_samples)
         """
         dec = self.decision_function(X)
-        n_class = self._lb.classes_.shape[0]
-        if n_class == 2:
+        if self._lb.y_type_ == 'binary':
             y_pred_ = np.sign(dec).reshape(-1, 1)
         else:
             y_pred_ = score2pred(dec)
@@ -351,18 +340,12 @@ class LapRLS(BaseEstimator, TransformerMixin):
         K = pairwise_kernels(X, self.X, metric=self.kernel, **self.kwargs)
         return np.dot(K, self.coef_)
 
-    def fit_predict(self, Xs, ys, Xt, yt=None):
+    def fit_predict(self, X, y):
         """
         Parameters:
-            Xs: Source data, array-like, shape (ns_samples, n_feautres)
-            ys: Source label, array-like, shape (ns_samples, )
-            Xt: Unlabelled target data,  array-like, shape (nt_samples, n_feautres)
-            yt: Target label, array-like, shape (ntl_samples, )
+            X: Input data, array-like, shape (n_samples, n_feautres)
+            y: Label, array-like, shape (nl_samples, ), where nl_samples <= n_samples
         """
-        self.fit(Xs, ys, Xt, yt)
-        if yt is not None:
-            ntl = yt.shape[0]
-            Xtest = Xt[ntl:, :]
-        else:
-            Xtest = Xt
-        return self.predict(Xtest)
+        self.fit(X, y)
+
+        return self.predict(X)

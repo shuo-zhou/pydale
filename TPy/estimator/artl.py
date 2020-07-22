@@ -1,20 +1,13 @@
 # =============================================================================
 # Author: Shuo Zhou, szhou20@sheffield.ac.uk, The University of Sheffield
 # =============================================================================
-import sys
-import warnings
 import numpy as np
-import scipy.sparse as sparse
 from numpy.linalg import multi_dot, inv, solve
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils.validation import check_is_fitted
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
-# import cvxpy as cvx
-# from cvxpy.error import SolverError
-from cvxopt import matrix, solvers
-import osqp
-from .manifold_learn import lapnorm, semi_binary_dual, semi_binary_ls
+from .manifold_learn import lapnorm, solve_semi_dual, solve_semi_ls
 from ..utils.mmd import mmd_coef
 from ..utils.multiclass import score2pred
 
@@ -78,41 +71,28 @@ class ARSVM(BaseEstimator, TransformerMixin):
         nl = y.shape[0]  # number of labelled data
 
         M = mmd_coef(ns, nt, ys, yt, kind='joint')
-
         K = pairwise_kernels(X, metric=self.kernel, **self.kwargs)
         K[np.isnan(K)] = 0
+        I = np.eye(n)
 
         y_ = self._lb.fit_transform(y)
 
-        # dual
-        I = np.eye(n)
-
         if self.gamma_ != 0:
-            L = lapnorm(X, n_neighbour=self.n_neighbour, mode=self.knn_mode)
+            L = lapnorm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode)
             Q_ = I + multi_dot([(self.lambda_ * M + self.gamma_ * L), K])
         else:
             Q_ = I + multi_dot([(self.lambda_ * M), K])
-        Q_inv = inv(Q_)
 
-        if self._lb.classes_.shape[0] == 2:
-            self.coef_, self.support_ = semi_binary_dual(K, y_, Q_inv,
-                                                         self.C, self.solver)
+        self.coef_, self.support_ = solve_semi_dual(K, y_, Q_, self.C, self.solver)
+        if self._lb.y_type_ == 'binary':
             self.support_vectors_ = X[:nl, :][self.support_]
             self.n_support_ = self.support_vectors_.shape[0]
-
         else:
-            coef_list = []
-            self.support_ = []
             self.support_vectors_ = []
             self.n_support_ = []
             for i in range(y_.shape[1]):
-                coef_, support_ = semi_binary_dual(K, y_[:, i], Q_inv,
-                                                   self.C, self.solver)
-                coef_list.append(coef_.reshape(-1, 1))
-                self.support_.append(support_)
-                self.support_vectors_.append(X[:nl, :][support_][-1])
+                self.support_vectors_.append(X[:nl, :][self.support_[i]][-1])
                 self.n_support_.append(self.support_vectors_[-1].shape[0])
-            self.coef_ = np.concatenate(coef_list, axis=1)
 
         self.X = X
         self.y = y
@@ -142,8 +122,7 @@ class ARSVM(BaseEstimator, TransformerMixin):
             predicted labels, array-like, shape (n_samples, )
         """
         dec = self.decision_function(X)
-        n_class = self._lb.classes_.shape[0]
-        if n_class == 2:
+        if self._lb.y_type_ == 'binary':
             y_pred_ = np.sign(dec).reshape(-1, 1)
         else:
             y_pred_ = score2pred(dec)
@@ -161,12 +140,8 @@ class ARSVM(BaseEstimator, TransformerMixin):
             yt: Target label, array-like, shape (ntl_samples, )
         """
         self.fit(Xs, ys, Xt, yt)
-        if yt is not None:
-            ntl = yt.shape[0]
-            Xtest = Xt[ntl:, :]
-        else:
-            Xtest = Xt
-        return self.predict(Xtest)
+
+        return self.predict(self.X)
 
 
 class ARRLS(BaseEstimator, TransformerMixin):
@@ -224,16 +199,10 @@ class ARRLS(BaseEstimator, TransformerMixin):
                         K) + self.sigma_ * I
         else:
             Q_ = np.dot((J + self.lambda_ * M), K) + self.sigma_ * I
-        Q_inv = inv(Q_)
 
         y_ = self._lb.fit_transform(y)
-        if self._lb.classes_.shape[0] == 2:
-            self.coef_ = semi_binary_ls(Q_inv, y_)
-        else:
-            coefs_ = []
-            for i in range(y_.shape[1]):
-                coefs_.append(semi_binary_ls(Q_inv, y_[:, i]).reshape(-1, 1))
-            self.coef_ = np.concatenate(coefs_, axis=1)
+        self.coef_ = solve_semi_ls(Q_, y_)
+
         self.X = X
         self.y = y
 
@@ -247,8 +216,7 @@ class ARRLS(BaseEstimator, TransformerMixin):
             predicted labels, array-like, shape (n_samples)
         """
         dec = self.decision_function(X)
-        n_class = self._lb.classes_.shape[0]
-        if n_class == 2:
+        if self._lb.y_type_ == 'binary':
             y_pred_ = np.sign(dec).reshape(-1, 1)
         else:
             y_pred_ = score2pred(dec)
@@ -274,9 +242,5 @@ class ARRLS(BaseEstimator, TransformerMixin):
             yt: Target label, array-like, shape (ntl_samples, )
         """
         self.fit(Xs, ys, Xt, yt)
-        if yt is not None:
-            ntl = yt.shape[0]
-            Xtest = Xt[ntl:, :]
-        else:
-            Xtest = Xt
-        return self.predict(Xtest)
+
+        return self.predict(self.X)
