@@ -9,7 +9,7 @@ from sklearn.metrics.pairwise import pairwise_kernels
 from ..utils.mmd import mmd_coef
 # from sklearn.preprocessing import StandardScaler
 # =============================================================================
-# Python of three transfer learning methods:
+# Implementation of three transfer learning methods:
 #   1. Transfer Component Analysis: TCA
 #   2. Joint Distribution Adaptation: JDA
 #   3. Balanced Distribution Adaptation: BDA
@@ -46,10 +46,10 @@ class JDA(BaseEstimator, TransformerMixin):
     def fit(self, Xs, Xt, ys=None, yt=None):
         """
         Parameters:
-            Xs: Source domain data, array-like, shape (n_samples, n_feautres)
-            Xt: Target domain data, array-like, shape (n_samples, n_feautres)
-            ys: Labels of source domain samples, shape (n_samples,)
-            yt: Labels of source domain samples, shape (n_samples,)
+            Xs: Source domain data, array-like, shape (ns_samples, n_feautres)
+            Xt: Target domain data, array-like, shape (nt_samples, n_feautres)
+            ys: Labels of source domain samples, shape (ns_samples,)
+            yt: Labels of source domain samples, shape (nt_samples,)
         """
         X = np.vstack((Xs, Xt))
 

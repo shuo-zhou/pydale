@@ -27,5 +27,5 @@ def mmd_coef(ns, nt, ys=None, yt=None, kind='marginal', mu=0.5):
             e = np.vstack((es, et))
             e[np.where(np.isinf(e))[0]] = 0
             Mc = Mc + mu * np.dot(e, e.T)
-        M = mu * M + (1-mu) * Mc  # joint mmd coefficients
+        M = (1 - mu) * M + mu *  Mc  # joint mmd coefficients
     return M

@@ -1,5 +1,18 @@
 # TPy
-A python toolbox for transfer learning/domain adaptation and tensor (multi-linear) regression
+A python library of (non-deep) transfer learning/domain adaptation.
+ <!-- and tensor (multi-linear) regression -->
+
+This package contains implementations of the following methods:
+- Transformers (learning feature embeddings):
+  - Transfer Feature Learning with Joint Distribution Adaptation (JDA) [[Long et al., 2013]](http://openaccess.thecvf.com/content_iccv_2013/papers/Long_Transfer_Feature_Learning_2013_ICCV_paper.pdf). <!-- [[Matlab Code by Author]](http://ise.thss.tsinghua.edu.cn/~mlong/doc/joint-distribution-adaptation-iccv13.zip). -->
+  - Domain adaptation via transfer component analysis (TCA) [[Pan et al., 2009]](http://www.aaai.org/ocs/index.php/IJCAI/IJCAI-09/paper/download/294/962).
+  - Balanced distribution adaptation (BDA) [[Wang et al., 2017]](http://jd92.wang/assets/files/a08_icdm17.pdf).
+  - Maximum Independence Domain Adaptation (MIDA) [[Yan et al., 2017]](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=7815350).
+- Estimators (learning classifiers):
+  - Manifold Regularisation Learning Framework (LapSVM, LapRLS) [[Belkin et al., 2006]](http://www.jmlr.org/papers/v7/belkin06a.html).
+  - Adaptation Regularisation Learning Framework (ARSVM, ARRLS) [[Long et al., 2014]](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=6550016).
+  - Side Information Independence Regularised Learning Framework (SIDeRSVM, SIDeRLS) [[Zhou et al, 2020]](https://aaai.org/ojs/index.php/AAAI/article/view/6179).
+
 
 ### Dependencies
 - [scikit-learn](http://scikit-learn.org/)
@@ -21,7 +34,7 @@ transformer = TCA(n_components=2)
 X_transformed = transformer.fit_transform(X)
 ```
 
-##### Training classifier for labelled source data (`Xs`, `ys`), and unlabelled target data (`Xt`)
+##### Training classifier for labelled source data (`Xs`, `ys`), and unlabelled target data `Xt`.
 
 Example 1: Using Manifold Regularisation Learning Framework
 ```
@@ -59,9 +72,7 @@ y_pred = clf.predict(Xt)
 
 
 <!-- ### References
-- [Transfer Feature Learning with Joint Distribution Adaptation (JDA)](http://openaccess.thecvf.com/content_iccv_2013/papers/Long_Transfer_Feature_Learning_2013_ICCV_paper.pdf) [Long et al.,](http://ise.thss.tsinghua.edu.cn/~mlong/) in ICCV, 2013. [[Matlab Code by Author]](http://ise.thss.tsinghua.edu.cn/~mlong/doc/joint-distribution-adaptation-iccv13.zip)
-- Domain adaptation via transfer component analysis (TCA)[Paper](http://www.aaai.org/ocs/index.php/IJCAI/IJCAI-09/paper/download/294/962) [Pan et al..,](http://www.ntu.edu.sg/home/sinnopan/index.html) in IJCAI, 2009. 
-- Wang, J., Chen, Y., Hao, S., Feng, W., & Shen, Z. (2017, November). Balanced distribution adaptation for transfer learning. In 2017 IEEE International Conference on Data Mining (ICDM) (pp. 1129-1134). IEEE. -->
+-->
 <!-- - Visual domain adaptation via transfer feature learning (VDA). Tahmoresnezhad, J. and Hashemi, S., 2017. Knowledge and Information Systems, 50(2), pp.585-605.
 - Cross-domain video concept detection using adaptive svms. Yang, J., Yan, R., & Hauptmann, A. G. (2007, September). In Proceedings of the 15th ACM international conference on Multimedia (pp. 188-197). ACM.
 - Cross-domain learning methods for high-level visual concept classification.Jiang, W., Zavesky, E., Chang, S.-F., and Loui, A.  In Image Processing, ICIP, 2008. 15th IEEE International Conference on (2008), IEEE, pp. 161-164.

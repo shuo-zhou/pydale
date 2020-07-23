@@ -66,7 +66,6 @@ class TCA(BaseEstimator, TransformerMixin):
             Ys_ = self._lb.fit_transform(ys)
             Yt_ = self._lb.transform(yt)
             y = np.concatenate((Ys_, Yt_), axis=0)
-            y = y.reshape((n, 1))
             Kyy = self.gamma_ * np.dot(y, y.T) + (1-self.gamma_) * I
             Lap_ = lapnorm(X, n_neighbour=self.k, mode='connectivity')
             obj = multi_dot([K, (L + self.mu * Lap_), K.T]) + self.lambda_ * I
