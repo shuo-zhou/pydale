@@ -8,6 +8,7 @@ from numpy.linalg import multi_dot
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.utils.validation import check_is_fitted
+from sklearn.preprocessing import LabelBinarizer
 # from sklearn.neighbors import kneighbors_graph
 # =============================================================================
 # Maximum independence domain adaptation (MIDA)
@@ -38,13 +39,14 @@ class MIDA(BaseEstimator, TransformerMixin):
         self.mu = mu
         self.eta = eta
         self.aug = aug
+        self._lb = LabelBinarizer(pos_label=1, neg_label=0)
 
     def fit(self, X, D, y=None):
         """
         Parameters:
             X: Input data, array-like, shape (n_samples, n_feautres)
-            D: Domain feature, array-like, shape (nt_samples, n_feautres)
-            y: Labels, array-like, shape (ns_samples,) or (ns_samples, n_class)
+            D: Domain covariates, array-like, shape (n_samples, n_feautres)
+            y: Labels, array-like, shape (nl_samples,)
         Note:
             Unsupervised MIDA is performed if ys and yt are not given.
             Semi-supervised MIDA is performed is ys and yt are given.
@@ -58,8 +60,8 @@ class MIDA(BaseEstimator, TransformerMixin):
         H = I - 1. / n * np.ones((n, n))
         Kd = np.dot(D, D.T)
         if y is not None:
-            y = y.reshape((n,1))
-            Ky = np.dot(y, y.T)
+            y_ = self._lb.fit_transform(y)
+            Ky = np.dot(y_, y_.T)
             obj = multi_dot([K, H, Kd, H, K.T])
             st = multi_dot([K, H, (self.mu * I + self.eta * Ky), H, K.T])
         # obj = np.trace(np.dot(K,L))
