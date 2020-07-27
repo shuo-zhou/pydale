@@ -195,7 +195,7 @@ class LapSVM(BaseEstimator, TransformerMixin):
         """
         n = X.shape[0]
         nl = y.shape[0]
-        K = pairwise_kernels(X, metric=self.kernel, **self.kwargs)
+        K = pairwise_kernels(X, metric=self.kernel, filter_params=True, **self.kwargs)
         K[np.isnan(K)] = 0
 
         I = np.eye(n)
@@ -233,7 +233,7 @@ class LapSVM(BaseEstimator, TransformerMixin):
         check_is_fitted(self, 'X')
         check_is_fitted(self, 'y')
         # X_fit = self.X
-        K = pairwise_kernels(X, self.X, metric=self.kernel, **self.kwargs)
+        K = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
 
         return np.dot(K, self.coef_)  # +self.intercept_
 
@@ -294,7 +294,7 @@ class LapRLS(BaseEstimator, TransformerMixin):
         n = X.shape[0]
         nl = y.shape[0]
         I = np.eye(n)
-        K = pairwise_kernels(X, metric=self.kernel, **self.kwargs)
+        K = pairwise_kernels(X, metric=self.kernel, filter_params=True, **self.kwargs)
         K[np.isnan(K)] = 0
 
         J = np.zeros((n, n))
@@ -337,7 +337,7 @@ class LapRLS(BaseEstimator, TransformerMixin):
         Return:
             prediction scores, array-like, shape (n_samples)
         """
-        K = pairwise_kernels(X, self.X, metric=self.kernel, **self.kwargs)
+        K = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
         return np.dot(K, self.coef_)
 
     def fit_predict(self, X, y):

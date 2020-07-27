@@ -71,7 +71,7 @@ class ARSVM(BaseEstimator, TransformerMixin):
         nl = y.shape[0]  # number of labelled data
 
         M = mmd_coef(ns, nt, ys, yt, kind='joint')
-        K = pairwise_kernels(X, metric=self.kernel, **self.kwargs)
+        K = pairwise_kernels(X, metric=self.kernel, filter_params=True, **self.kwargs)
         K[np.isnan(K)] = 0
         I = np.eye(n)
 
@@ -110,7 +110,7 @@ class ARSVM(BaseEstimator, TransformerMixin):
         check_is_fitted(self, 'X')
         check_is_fitted(self, 'y')
         # X_fit = self.X
-        K = pairwise_kernels(X, self.X, metric=self.kernel, **self.kwargs)
+        K = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
 
         return np.dot(K, self.coef_)  # +self.intercept_
 
@@ -186,7 +186,7 @@ class ARRLS(BaseEstimator, TransformerMixin):
         M = mmd_coef(ns, nt, ys, yt, kind='joint')
 
         I = np.eye(n)
-        K = pairwise_kernels(X, metric=self.kernel, **self.kwargs)
+        K = pairwise_kernels(X, metric=self.kernel, filter_params=True, **self.kwargs)
         K[np.isnan(K)] = 0
 
         J = np.zeros((n, n))
@@ -230,7 +230,7 @@ class ARRLS(BaseEstimator, TransformerMixin):
         Return:
             prediction scores, array-like, shape (n_samples)
         """
-        K = pairwise_kernels(X, self.X, metric=self.kernel, **self.kwargs)
+        K = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
         return np.dot(K, self.coef_)  
 
     def fit_predict(self, Xs, ys, Xt, yt=None):

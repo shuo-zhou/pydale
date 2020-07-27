@@ -68,7 +68,7 @@ class SIDeRSVM(BaseEstimator, TransformerMixin):
         n = X.shape[0]
         nl = y.shape[0]
         Ka = np.dot(D, D.T)
-        K = pairwise_kernels(X, metric=self.kernel, **self.kwargs)
+        K = pairwise_kernels(X, metric=self.kernel, filter_params=True, **self.kwargs)
         K[np.isnan(K)] = 0
 
         y_ = self._lb.fit_transform(y)
@@ -116,7 +116,7 @@ class SIDeRSVM(BaseEstimator, TransformerMixin):
             decision scores, array-like, shape (n_samples,) for binary
             classification, (n_samples, n_class) for multi-class cases
         """
-        K = pairwise_kernels(X, self.X, metric=self.kernel, **self.kwargs)
+        K = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
         return np.dot(K, self.coef_)  # +self.intercept_
 
     def predict(self, X):
@@ -194,7 +194,7 @@ class SIDeRLS(BaseEstimator, TransformerMixin):
         nl = y.shape[0]
 
         Kd = np.dot(D, D.T)
-        K = pairwise_kernels(X, metric=self.kernel, **self.kwargs)
+        K = pairwise_kernels(X, metric=self.kernel, filter_params=True, **self.kwargs)
         K[np.isnan(K)] = 0
 
         J = np.zeros((n, n))
@@ -229,7 +229,7 @@ class SIDeRLS(BaseEstimator, TransformerMixin):
             prediction scores, array-like, shape (n_samples)
         """
         
-        K = pairwise_kernels(X, self.X, metric=self.kernel, **self.kwargs)
+        K = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
         return np.dot(K, self.coef_)  # +self.intercept_
 
     def predict(self, X):
