@@ -4,5 +4,4 @@ pandas
 scikit-learn
 cvxopt
 osqp
-pandas
 pytorch

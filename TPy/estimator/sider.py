@@ -6,23 +6,17 @@ Ref: Zhou, S., Li, W., Cox, C.R. and Lu, H., 2020. Side Information Dependence
  In Proceedings of the 34th AAAI Conference on Artificial Intelligence (AAAI 2020).
 """
 
-import sys
-import warnings
 import numpy as np
-import scipy.sparse as sparse
-from numpy.linalg import multi_dot, inv
-from sklearn.base import BaseEstimator, TransformerMixin
+from numpy.linalg import multi_dot
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
-from cvxopt import matrix, solvers
-import osqp
-from .manifold_learn import lapnorm, semi_binary_dual, solve_semi_ls
 from ..utils.multiclass import score2pred
+from .base import SSLFramework
 
 
-class SIDeRSVM(BaseEstimator, TransformerMixin):
+class SIDeRSVM(SSLFramework):
     def __init__(self, C=1, kernel='linear', lambda_=1, mu=0, k_neighbour=3,
                  manifold_metric='cosine', knn_mode='distance', solver='osqp', **kwargs):
         """
@@ -45,8 +39,8 @@ class SIDeRSVM(BaseEstimator, TransformerMixin):
         self.solver = solver
         # self.scaler = StandardScaler()
         # self.coef_ = None
-        # self.X = None
-        # self.y = None
+        # self._X = None
+        # self._y = None
         # self.support_ = None
         # self.support_vectors_ = None
         # self.n_support_ = None
@@ -66,7 +60,7 @@ class SIDeRSVM(BaseEstimator, TransformerMixin):
         # X, D = cat_data(Xl, Dl, Xu, Du)
         # X = self.scaler.fit_transform(X)
         n = X.shape[0]
-        nl = y.shape[0]
+        # nl = y.shape[0]
         Ka = np.dot(D, D.T)
         K = pairwise_kernels(X, metric=self.kernel, filter_params=True, **self.kwargs)
         K[np.isnan(K)] = 0
@@ -76,35 +70,40 @@ class SIDeRSVM(BaseEstimator, TransformerMixin):
         I = np.eye(n)
         H = I - 1. / n * np.ones((n, n))
         if self.mu != 0:
-            lap_norm = lapnorm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode,
-                               metric=self.manifold_metric)
+            lap_norm = self._lapnorm(X, n_neighbour=self.k_neighbour,
+                                     mode=self.knn_mode,
+                                     metric=self.manifold_metric)
             Q_ = I + np.dot(self.lambda_ / np.square(n - 1) * multi_dot([H, Ka, H])
                             + self.mu / np.square(n) * lap_norm, K)
         else:
             Q_ = I + self.lambda_ / np.square(n - 1) * multi_dot([H, Ka, H, K])
 
-        if self._lb.y_type_ == 'binary':
-            self.coef_, self.support_ = semi_binary_dual(K, y_, Q_, self.C,
-                                                         self.solver)
-            self.support_vectors_ = X[:nl, :][self.support_]
-            self.n_support_ = self.support_vectors_.shape[0]
+        self.coef_, self.support_ = self._solve_semi_dual(K, y_, Q_, self.C, self.solver)
 
-        else:
-            coef_list = []
-            self.support_ = []
-            self.support_vectors_ = []
-            self.n_support_ = []
-            for i in range(y_.shape[1]):
-                coef_, support_ = semi_binary_dual(K, y_[:, i], Q_, self.C,
-                                                   self.solver)
-                coef_list.append(coef_.reshape(-1, 1))
-                self.support_.append(support_)
-                self.support_vectors_.append(X[:nl, :][support_][-1])
-                self.n_support_.append(self.support_vectors_[-1].shape[0])
-            self.coef_ = np.concatenate(coef_list, axis=1)
+        # if self._lb.y_type_ == 'binary':
+        #     self.coef_, self.support_ = self._semi_binary_dual(K, y_, Q_,
+        #                                                        self.C,
+        #                                                        self.solver)
+        #     self.support_vectors_ = X[:nl, :][self.support_]
+        #     self.n_support_ = self.support_vectors_.shape[0]
+        #
+        # else:
+        #     coef_list = []
+        #     self.support_ = []
+        #     self.support_vectors_ = []
+        #     self.n_support_ = []
+        #     for i in range(y_.shape[1]):
+        #         coef_, support_ = self._semi_binary_dual(K, y_[:, i], Q_,
+        #                                                  self.C,
+        #                                                  self.solver)
+        #         coef_list.append(coef_.reshape(-1, 1))
+        #         self.support_.append(support_)
+        #         self.support_vectors_.append(X[:nl, :][support_][-1])
+        #         self.n_support_.append(self.support_vectors_[-1].shape[0])
+        #     self.coef_ = np.concatenate(coef_list, axis=1)
 
-        self.X = X
-        self.y = y
+        self._X = X
+        self._y = y
 
         return self
 
@@ -116,7 +115,7 @@ class SIDeRSVM(BaseEstimator, TransformerMixin):
             decision scores, array-like, shape (n_samples,) for binary
             classification, (n_samples, n_class) for multi-class cases
         """
-        K = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
+        K = pairwise_kernels(X, self._X, metric=self.kernel, filter_params=True, **self.kwargs)
         return np.dot(K, self.coef_)  # +self.intercept_
 
     def predict(self, X):
@@ -149,7 +148,7 @@ class SIDeRSVM(BaseEstimator, TransformerMixin):
         return self.predict(X)
 
 
-class SIDeRLS(BaseEstimator, TransformerMixin):
+class SIDeRLS(SSLFramework):
     def __init__(self, sigma_=1, lambda_=1, mu=0, kernel='linear', k=3,
                  knn_mode='distance', manifold_metric='cosine',
                  class_weight=None, **kwargs):
@@ -172,8 +171,8 @@ class SIDeRLS(BaseEstimator, TransformerMixin):
         self.mu = mu
         # self.classes = None
         # self.coef_ = None
-        # self.X = None
-        # self.y = None
+        # self._X = None
+        # self._y = None
         self.manifold_metric = manifold_metric
         self.k = k
         self.knn_mode = knn_mode
@@ -204,8 +203,9 @@ class SIDeRLS(BaseEstimator, TransformerMixin):
         H = I - 1. / n * np.ones((n, n))
 
         if self.mu != 0:
-            lap_norm = lapnorm(X, n_neighbour=self.k, mode=self.knn_mode,
-                               metric=self.manifold_metric)
+            lap_norm = self._lapnorm(X, n_neighbour=self.k,
+                                     mode=self.knn_mode,
+                                     metric=self.manifold_metric)
             Q_ = self.sigma_ * I + np.dot(J + self.lambda_ / np.square(n - 1)
                                           * multi_dot([H, Kd, H])
                                           + self.mu / np.square(n) * lap_norm, K)
@@ -214,10 +214,10 @@ class SIDeRLS(BaseEstimator, TransformerMixin):
                                           * multi_dot([H, Kd, H]), K)
 
         y_ = self._lb.fit_transform(y)
-        self.coef_ = solve_semi_ls(Q_, y_)
+        self.coef_ = self._solve_semi_ls(Q_, y_)
 
-        self.X = X
-        self.y = y
+        self._X = X
+        self._y = y
 
         return self
 
@@ -229,7 +229,7 @@ class SIDeRLS(BaseEstimator, TransformerMixin):
             prediction scores, array-like, shape (n_samples)
         """
         
-        K = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
+        K = pairwise_kernels(X, self._X, metric=self.kernel, filter_params=True, **self.kwargs)
         return np.dot(K, self.coef_)  # +self.intercept_
 
     def predict(self, X):

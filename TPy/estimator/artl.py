@@ -2,15 +2,13 @@
 # Author: Shuo Zhou, szhou20@sheffield.ac.uk, The University of Sheffield
 # =============================================================================
 import numpy as np
-from numpy.linalg import multi_dot, inv, solve
-from sklearn.base import BaseEstimator, TransformerMixin
+from numpy.linalg import multi_dot
 from sklearn.utils.validation import check_is_fitted
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
-from .manifold_learn import lapnorm, solve_semi_dual, solve_semi_ls
 from ..utils.mmd import mmd_coef
 from ..utils.multiclass import score2pred
-
+from .base import SSLFramework
 # =============================================================================
 # Adaptation Regularisation Transfer Learning: ARTL
 # Ref: Long, M., Wang, J., Ding, G., Pan, S.J. and Philip, S.Y., 2013. 
@@ -19,7 +17,28 @@ from ..utils.multiclass import score2pred
 # =============================================================================
 
 
-def cat_xy(Xs, ys, Xt, yt=None):
+def _init_artl(Xs, ys, Xt, yt=None, **kwargs):
+    """[summary]
+
+    Parameters
+    ----------
+    Xs : [type]
+        [description]
+    ys : [type]
+        [description]
+    Xt : [type]
+        [description]
+    yt : [type], optional
+        [description], by default None
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
+    ns = Xs.shape[0]
+    nt = Xt.shape[0]
+    n = ns + nt
     if yt is not None:
         X = np.concatenate([Xs, Xt], axis=0)
         y = np.concatenate([ys, yt])
@@ -27,10 +46,15 @@ def cat_xy(Xs, ys, Xt, yt=None):
         X = np.concatenate([Xs, Xt], axis=0)
         y = ys.copy()
 
-    return X, y
+    M = mmd_coef(ns, nt, ys, yt, kind='joint')
+    K = pairwise_kernels(X, **kwargs)
+    K[np.isnan(K)] = 0
+    I = np.eye(n)
+
+    return X, y, K, M, I
 
 
-class ARSVM(BaseEstimator, TransformerMixin):
+class ARSVM(SSLFramework):
     def __init__(self, C=1, kernel='linear', lambda_=1, gamma_=0, k_neighbour=5,
                  solver='osqp', manifold_metric='cosine', knn_mode='distance', **kwargs):
         """
@@ -64,37 +88,29 @@ class ARSVM(BaseEstimator, TransformerMixin):
                 the first ntl samples are labelled if yt is not None
             yt: Target label, array-like, shape (ntl_samples, )
         """
-        ns = Xs.shape[0]
-        nt = Xt.shape[0]
-        n = ns + nt
-        X, y = cat_xy(Xs, ys, Xt, yt)
-        nl = y.shape[0]  # number of labelled data
-
-        M = mmd_coef(ns, nt, ys, yt, kind='joint')
-        K = pairwise_kernels(X, metric=self.kernel, filter_params=True, **self.kwargs)
-        K[np.isnan(K)] = 0
-        I = np.eye(n)
+        X, y, K, M, I = _init_artl(Xs, ys, Xt, yt, metric=self.kernel,
+                                   filter_params=True, **self.kwargs)
 
         y_ = self._lb.fit_transform(y)
 
         if self.gamma_ != 0:
-            L = lapnorm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode)
+            L = self._lapnorm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode)
             Q_ = I + multi_dot([(self.lambda_ * M + self.gamma_ * L), K])
         else:
             Q_ = I + multi_dot([(self.lambda_ * M), K])
 
-        self.coef_, self.support_ = solve_semi_dual(K, y_, Q_, self.C, self.solver)
-        if self._lb.y_type_ == 'binary':
-            self.support_vectors_ = X[:nl, :][self.support_]
-            self.n_support_ = self.support_vectors_.shape[0]
-        else:
-            self.support_vectors_ = []
-            self.n_support_ = []
-            for i in range(y_.shape[1]):
-                self.support_vectors_.append(X[:nl, :][self.support_[i]][-1])
-                self.n_support_.append(self.support_vectors_[-1].shape[0])
+        self.coef_, self.support_ = self._solve_semi_dual(K, y_, Q_, self.C, self.solver)
+        # if self._lb.y_type_ == 'binary':
+        #     self.support_vectors_ = X[:nl, :][self.support_]
+        #     self.n_support_ = self.support_vectors_.shape[0]
+        # else:
+        #     self.support_vectors_ = []
+        #     self.n_support_ = []
+        #     for i in range(y_.shape[1]):
+        #         self.support_vectors_.append(X[:nl, :][self.support_[i]][-1])
+        #         self.n_support_.append(self.support_vectors_[-1].shape[0])
 
-        self.X = X
+        self._X = X
         self.y = y
 
         return self
@@ -109,8 +125,8 @@ class ARSVM(BaseEstimator, TransformerMixin):
         """
         check_is_fitted(self, 'X')
         check_is_fitted(self, 'y')
-        # X_fit = self.X
-        K = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
+        # X_fit = self._X
+        K = pairwise_kernels(X, self._X, metric=self.kernel, filter_params=True, **self.kwargs)
 
         return np.dot(K, self.coef_)  # +self.intercept_
 
@@ -141,10 +157,10 @@ class ARSVM(BaseEstimator, TransformerMixin):
         """
         self.fit(Xs, ys, Xt, yt)
 
-        return self.predict(self.X)
+        return self.predict(self._X)
 
 
-class ARRLS(BaseEstimator, TransformerMixin):
+class ARRLS(SSLFramework):
     def __init__(self, kernel='linear', lambda_=1, gamma_=0, sigma_=1, k_neighbour=5,
                  manifold_metric='cosine', knn_mode='distance', **kwargs):
         """
@@ -174,26 +190,19 @@ class ARRLS(BaseEstimator, TransformerMixin):
             Xs: Source data, array-like, shape (ns_samples, n_feautres)
             ys: Source label, array-like, shape (ns_samples, )
             Xt: Unlabelled target data,  array-like, shape (ntu_samples, n_feautres)
-            Xtl: Labelled target data, array-like, shape (ntl_samples, n_feautres)
             yt: Target label, array-like, shape (ntl_samples, )
         """
-        ns = Xs.shape[0]
-        nt = Xt.shape[0]
-        n = ns + nt
-        X, y = cat_xy(Xs, ys, Xt, yt)
-        nl = y.shape[0]  # number of labelled data
+        X, y, K, M, I = _init_artl(Xs, ys, Xt, yt, metric=self.kernel,
+                                   filter_params=True, **self.kwargs)
 
-        M = mmd_coef(ns, nt, ys, yt, kind='joint')
-
-        I = np.eye(n)
-        K = pairwise_kernels(X, metric=self.kernel, filter_params=True, **self.kwargs)
-        K[np.isnan(K)] = 0
+        n = K.shap[0]
+        nl = y.shape[0]
 
         J = np.zeros((n, n))
         J[:nl, :nl] = np.eye(nl)
 
         if self.gamma_ != 0:
-            L = lapnorm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode,
+            L = self._lapnorm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode,
                         metric=self.manifold_metric)
             Q_ = np.dot((J + self.lambda_ * M + self.gamma_ * L),
                         K) + self.sigma_ * I
@@ -201,10 +210,10 @@ class ARRLS(BaseEstimator, TransformerMixin):
             Q_ = np.dot((J + self.lambda_ * M), K) + self.sigma_ * I
 
         y_ = self._lb.fit_transform(y)
-        self.coef_ = solve_semi_ls(Q_, y_)
+        self.coef_ = self._solve_semi_ls(Q_, y_)
 
-        self.X = X
-        self.y = y
+        self._X = X
+        self._y = y
 
         return self
 
@@ -230,7 +239,7 @@ class ARRLS(BaseEstimator, TransformerMixin):
         Return:
             prediction scores, array-like, shape (n_samples)
         """
-        K = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
+        K = pairwise_kernels(X, self._X, metric=self.kernel, filter_params=True, **self.kwargs)
         return np.dot(K, self.coef_)  
 
     def fit_predict(self, Xs, ys, Xt, yt=None):
@@ -243,4 +252,4 @@ class ARRLS(BaseEstimator, TransformerMixin):
         """
         self.fit(Xs, ys, Xt, yt)
 
-        return self.predict(self.X)
+        return self.predict(Xt)
