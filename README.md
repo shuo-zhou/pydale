@@ -23,7 +23,7 @@ This package contains implementations of the following methods:
 <!-- - [cvxpy](http://www.cvxpy.org/) -->
 <!-- - [pytorch](https://pytorch.org/) -->
 
-
+<!--
 ### Scikit-learn Style Implementation
 
 ##### Learning low-dimensional embedding for input data `X`
@@ -69,6 +69,7 @@ clf = SIDeRSVM()
 clf.fit(np.concatnate((Xs, Xt)), ys, D)
 y_pred = clf.predict(Xt)
 ```
+ -->
 
 
 <!-- ### References

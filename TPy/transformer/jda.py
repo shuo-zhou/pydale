@@ -62,7 +62,7 @@ class JDA(BaseEstimator, TransformerMixin):
             L = mmd_coef(ns, nt, kind='marginal', mu=0)
 
         # Construct kernel matrix
-        K = pairwise_kernels(X, metric=self.kernel, **self.kwargs)
+        K = pairwise_kernels(X, metric=self.kernel, filter_params=True, **self.kwargs)
         K[np.isnan(K)] = 0
     
         # Construct centering matrix
@@ -97,7 +97,7 @@ class JDA(BaseEstimator, TransformerMixin):
         # check_is_fitted(self, 'Xs')
         # check_is_fitted(self, 'Xt')
         X_fit = np.vstack((self.Xs, self.Xt))
-        K = pairwise_kernels(X, X_fit, metric=self.kernel, **self.kwargs)
+        K = pairwise_kernels(X, X_fit, metric=self.kernel, filter_params=True, **self.kwargs)
         U_ = self.U[:, :self.n_components]
         X_transformed = np.dot(K, U_)
         return X_transformed
