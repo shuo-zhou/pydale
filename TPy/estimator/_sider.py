@@ -17,19 +17,34 @@ from .base import SSLFramework
 
 
 class SIDeRSVM(SSLFramework):
-    def __init__(self, C=1, kernel='linear', lambda_=1, mu=0, k_neighbour=3,
+    def __init__(self, C=1.0, kernel='linear', lambda_=1.0, mu=0.0, k_neighbour=3,
                  manifold_metric='cosine', knn_mode='distance', solver='osqp', **kwargs):
-        """
+        """Side Information Dependence Regularised Support Vector Machine
+
         Parameters
-            C: param for importance of slack variable
-            kernel: 'rbf' | 'linear' | 'poly' (default is 'linear')
-            **kwargs: kernel param
-            lambda_: param for side information dependence regularisation
-            mu: param for manifold regularisation (default 0, not apply)
-            manifold_metric: metric for manifold regularisation
-            k: number of nearest numbers for manifold regularisation
-            knn_mode: default distance
-            solver: quadratic programming solver, cvxopt, osqp (default)
+        ----------
+        C : float, optional
+            param for importance of slack variable, by default 1
+        kernel : str, optional
+            'rbf' | 'linear' | 'poly', by default 'linear'
+        lambda_ : float, optional
+            param for side information dependence regularisation, by default 1
+        mu : float, optional
+            param for manifold regularisation, by default 0
+        k_neighbour : int, optional
+            number of nearest numbers for each sample in manifold regularisation, 
+            by default 3
+        manifold_metric : str, optional
+            The distance metric used to calculate the k-Neighbors for each 
+            sample point. The DistanceMetric class gives a list of available 
+            metrics. By default 'cosine'.
+        knn_mode : str, optional
+            {‘connectivity’, ‘distance’}, by default 'distance'. Type of 
+            returned matrix: ‘connectivity’ will return the connectivity 
+            matrix with ones and zeros, and ‘distance’ will return the 
+            distances between neighbors according to the given metric.
+        solver : str, optional
+            quadratic programming solver, [cvxopt, osqp], by default 'osqp'
         """
         self.kwargs = kwargs
         self.kernel = kernel
@@ -50,12 +65,21 @@ class SIDeRSVM(SSLFramework):
         self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
 
     def fit(self, X, y, D):
-        """
-        solve min_x x^TPx + q^Tx, s.t. Gx<=h, Ax=b
-        Parameters:
-            X: Input data, array-like, shape (n_samples, n_feautres)
-            y: Label, array-like, shape (nl_samples, ) where nl_samples <= n_samples
-            D: Domain covariate matrix for input data, array-like, shape (n_samples, n_covariates)
+        """Fit the model according to the given training data.
+
+        Parameters
+        ----------
+        X : array-like
+            Input data, shape (n_samples, n_feautres)
+        y : array-like
+            Label,, shape (nl_samples, ) where nl_samples <= n_samples
+        D : array-like, 
+            Domain covariate matrix for input data, shape (n_samples, n_covariates)
+
+        Returns
+        -------
+        self
+            [description]
         """
         # X, D = cat_data(Xl, Dl, Xu, Du)
         # X = self.scaler.fit_transform(X)
@@ -108,22 +132,34 @@ class SIDeRSVM(SSLFramework):
         return self
 
     def decision_function(self, X):
-        """
-        Parameters:
-            X: array-like, shape (n_samples, n_feautres)
-        Return:
-            decision scores, array-like, shape (n_samples,) for binary
-            classification, (n_samples, n_class) for multi-class cases
+        """[summary]
+
+        Parameters
+        ----------
+        X : array-like
+            Input data, shape (n_samples, n_feautres)
+            
+        Returns
+        -------
+        array-like
+            decision scores, shape (n_samples,) for binary classification, 
+            (n_samples, n_class) for multi-class cases
         """
         K = pairwise_kernels(X, self._X, metric=self.kernel, filter_params=True, **self.kwargs)
         return np.dot(K, self.coef_)  # +self.intercept_
 
     def predict(self, X):
-        """
-        Parameters:
-            X: array-like, shape (n_samples, n_feautres)
-        Return:
-            predicted labels, array-like, shape (n_samples,)
+        """Perform classification on samples in X.
+
+        Parameters
+        ----------
+        X : array-like
+            Input data, shape (n_samples, n_feautres)
+            
+        Returns
+        -------
+        array-like
+            predicted labels, shape (n_samples,)
         """
         dec = self.decision_function(X)
         if self._lb.y_type_ == 'binary':
@@ -134,36 +170,60 @@ class SIDeRSVM(SSLFramework):
         return self._lb.inverse_transform(y_pred_)
 
     def fit_predict(self, X, y, D):
-        """
-        solve min_x x^TPx + q^Tx, s.t. Gx<=h, Ax=b
-        Parameters:
-            Parameters:
-            X: Input data, array-like, shape (n_samples, n_feautres)
-            y: Label, array-like, shape (nl_samples, ) where nl_samples <= n_samples
-            D: Domain covariate matrix for input data, array-like, shape (n_samples, n_covariates)
-        Return:
-            predicted labels, array-like, shape (n_samples,)
+        """[summary]
+
+        Parameters
+        ----------
+        X : array-like
+            Input data, shape (n_samples, n_feautres)
+        y : array-like
+            Label,, shape (nl_samples, ) where nl_samples <= n_samples
+        D : array-like, 
+            Domain covariate matrix for input data, shape (n_samples, n_covariates)
+
+        Returns
+        -------
+        array-like
+            predicted labels, shape (n_samples,)
         """
         self.fit(X, y, D)
         return self.predict(X)
 
 
 class SIDeRLS(SSLFramework):
-    def __init__(self, sigma_=1, lambda_=1, mu=0, kernel='linear', k=3,
-                 knn_mode='distance', manifold_metric='cosine',
+    def __init__(self, sigma_=1.0, lambda_=1.0, mu=0.0, kernel='linear', 
+                 k=3, knn_mode='distance', manifold_metric='cosine', 
                  class_weight=None, **kwargs):
+        """Side Information Dependence Regularised Least Square
+
+        Parameters
+        ----------
+        sigma_ : float, optional
+            param for model complexity (l2 norm), by default 1.0
+        lambda_ : float, optional
+            param for side information dependence regularisation, by default 1.0
+        mu : float, optional
+            param for manifold regularisation, by default 0.0
+        kernel : str, optional
+            [description], by default 'linear'
+        k : int, optional
+            number of nearest numbers for each sample in manifold regularisation, 
+            by default 3
+        knn_mode : str, optional
+            {‘connectivity’, ‘distance’}, by default 'distance'. Type of 
+            returned matrix: ‘connectivity’ will return the connectivity 
+            matrix with ones and zeros, and ‘distance’ will return the 
+            distances between neighbors according to the given metric.
+        manifold_metric : str, optional
+            The distance metric used to calculate the k-Neighbors for each 
+            sample point. The DistanceMetric class gives a list of available 
+            metrics. By default 'cosine'.
+        class_weight : [type], optional
+            [description], by default None
+        **kwargs: 
+            kernel param
         """
-        Parameters:
-            sigma_: param for model complexity (l2 norm)
-            lambda_: param for side information dependence regularisation
-            mu: param for manifold regularisation (default 0, not apply)
-            kernel: 'rbf' | 'linear' | 'poly' (default is 'linear')
-            **kwargs: kernel param
-            manifold_metric: metric for manifold regularisation
-            k: number of nearest numbers for manifold regularisation
-            knn_mode: default distance
-            class_weight: None | balance (default None)
-        """
+        
         self.kwargs = kwargs
         self.kernel = kernel
         self.sigma_ = sigma_
@@ -180,13 +240,21 @@ class SIDeRLS(SSLFramework):
         self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
 
     def fit(self, X, y, D):
-        """
-        Parameters:
-            X: Input data, array-like, shape (n_samples, n_feautres)
-            y: Label, array-like, shape (nl_samples, ) where nl_samples <= n_samples
-            D: Domain covariate matrix for input data, array-like, shape (n_samples, n_covariates)
-        Return:
-            self
+        """Fit the model according to the given training data.
+
+        Parameters
+        ----------
+        X : array-like
+            Input data, shape (n_samples, n_feautres)
+        y : array-like
+            Label,, shape (nl_samples, ) where nl_samples <= n_samples
+        D : array-like, 
+            Domain covariate matrix for input data, shape (n_samples, n_covariates)
+
+        Returns
+        -------
+        self
+            [description]
         """
         # X, D = cat_data(Xl, Dl, Xu, Du)
         n = X.shape[0]
@@ -222,22 +290,35 @@ class SIDeRLS(SSLFramework):
         return self
 
     def decision_function(self, X):
-        """
-        Parameters:
-            X: array-like, shape (n_samples, n_feautres)
-        Return:
-            prediction scores, array-like, shape (n_samples)
+        """Evaluates the decision function for the samples in X.
+
+        Parameters
+        ----------
+        X : array-like
+            Input data, shape (n_samples, n_feautres)
+            
+        Returns
+        -------
+        array-like
+            decision scores, shape (n_samples,) for binary classification, 
+            (n_samples, n_class) for multi-class cases
         """
         
         K = pairwise_kernels(X, self._X, metric=self.kernel, filter_params=True, **self.kwargs)
         return np.dot(K, self.coef_)  # +self.intercept_
 
     def predict(self, X):
-        """
-        Parameters:
-            X: array-like, shape (n_samples, n_feautres)
-        Return:
-            predicted labels, array-like, shape (n_samples)
+        """Perform classification on samples in X.
+
+        Parameters
+        ----------
+        X : array-like
+            Input data, shape (n_samples, n_feautres)
+            
+        Returns
+        -------
+        array-like
+            predicted labels, shape (n_samples,)
         """
         dec = self.decision_function(X)
         if self._lb.y_type_ == 'binary':
@@ -248,13 +329,22 @@ class SIDeRLS(SSLFramework):
         return self._lb.inverse_transform(y_pred_)
 
     def fit_predict(self, X, y, D):
-        """
-        Parameters:
-            X: Input data, array-like, shape (n_samples, n_feautres)
-            y: Label, array-like, shape (nl_samples, ) where nl_samples <= n_samples
-            D: Domain covariate matrix for input data, array-like, shape (n_samples, n_covariates)
-        Return:
-            predicted labels, array-like, shape (n_samples,)
+        """Fit the model according to the given training data and then perform
+            classification on samples in X.
+
+        Parameters
+        ----------
+        X : array-like
+            Input data, shape (n_samples, n_feautres)
+        y : array-like
+            Label,, shape (nl_samples, ) where nl_samples <= n_samples
+        D : array-like, 
+            Domain covariate matrix for input data, shape (n_samples, n_covariates)
+
+        Returns
+        -------
+        array-like
+            predicted labels, shape (n_samples,)
         """
         self.fit(X, y, D)
         return self.predict(X)
