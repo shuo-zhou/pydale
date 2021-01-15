@@ -42,35 +42,39 @@ class JDA(BaseEstimator, TransformerMixin):
         self.lambda_ = lambda_
         self.mu = mu
 
-    def fit(self, Xs, Xt, ys=None, yt=None):
+    def fit(self, Xs, ys=None, Xt=None, yt=None):
         """
 
         Parameters
         ----------
         Xs : array-like
-            Source domain data, shape (ns_samples, n_features)
-        Xt : array-like
-            Target domain data, shape (nt_samples, n_features)
+            Source domain data, shape (ns_samples, n_features).
         ys : array-like, optional
-            Source domain labels, shape (ns_samples,), by default None
+            Source domain labels, shape (ns_samples,), by default None.
+        Xt : array-like
+            Target domain data, shape (nt_samples, n_features), by default None.
         yt : array-like, optional
-            Target domain labels, shape (nt_samples,), by default None
+            Target domain labels, shape (nt_samples,), by default None.
         """
-        X = np.vstack((Xs, Xt))
-        ns = Xs.shape[0]
-        nt = Xt.shape[0]
+        if type(Xt) == np.ndarray:
+            X = np.vstack((Xs, Xt))
+            ns = Xs.shape[0]
+            nt = Xt.shape[0]
 
-        if ys is not None and yt is not None:
-            L = mmd_coef(ns, nt, ys, yt, kind='joint', mu=self.mu)
+            if ys is not None and yt is not None:
+                L = mmd_coef(ns, nt, ys, yt, kind='joint', mu=self.mu)
+            else:
+                L = mmd_coef(ns, nt, kind='marginal', mu=0)
         else:
-            L = mmd_coef(ns, nt, kind='marginal', mu=0)
+            X = Xs
+            L = np.zeros((X.shape[0], X.shape[0]))
 
-        K, I, H, n = base_init(X, kernel=self.kernel, **self.kwargs)
+        ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
 
         # objective for optimization
-        obj = np.dot(np.dot(K, L), K.T) + self.lambda_ * I
+        obj = np.dot(np.dot(ker_x, L), ker_x.T) + self.lambda_ * unit_mat
         # constraint subject to
-        st = np.dot(np.dot(K, H), K.T)
+        st = np.dot(np.dot(ker_x, ctr_mat), ker_x.T)
         eig_values, eig_vectors = eig(obj, st)
         
         ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
@@ -101,30 +105,28 @@ class JDA(BaseEstimator, TransformerMixin):
         # check_is_fitted(self, 'Xs')
         # check_is_fitted(self, 'Xt')
         X_fit = np.vstack((self.Xs, self.Xt))
-        K = pairwise_kernels(X, X_fit, metric=self.kernel, filter_params=True, **self.kwargs)
-        U_ = self.U[:, :self.n_components]
-        X_transformed = np.dot(K, U_)
-        return X_transformed
+        ker_x = pairwise_kernels(X, X_fit, metric=self.kernel, filter_params=True, **self.kwargs)
+
+        return np.dot(ker_x, self.U[:, :self.n_components])
     
-    def fit_transform(self, Xs, Xt, ys=None, yt=None):
+    def fit_transform(self, Xs, ys=None, Xt=None, yt=None):
         """
         Parameters
         ----------
         Xs : array-like
-            Source domain data, shape (ns_samples, n_features)
-        Xt : array-like
-            Target domain data, shape (nt_samples, n_features)
+            Source domain data, shape (ns_samples, n_features).
         ys : array-like, optional
-            Source domain labels, shape (ns_samples,), by default None
+            Source domain labels, shape (ns_samples,), by default None.
+        Xt : array-like
+            Target domain data, shape (nt_samples, n_features), by default None.
         yt : array-like, optional
-            Target domain labels, shape (nt_samples,), by default None
+            Target domain labels, shape (nt_samples,), by default None.
 
         Returns
         -------
         array-like
             transformed Xs_transformed, Xt_transformed
         """
-        self.fit(Xs, Xt, ys, yt)
-        Xs_transformed = self.transform(Xs)
-        Xt_transformed = self.transform(Xt)
-        return Xs_transformed, Xt_transformed
+        self.fit(Xs, ys, Xt, yt)
+
+        return self.transform(Xs), self.transform(Xt)

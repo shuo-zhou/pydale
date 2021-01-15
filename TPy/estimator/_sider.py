@@ -15,7 +15,7 @@ from sklearn.preprocessing import LabelBinarizer
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
 from ..utils.multiclass import score2pred
-from ..utils import lap_norm
+from ..utils import lap_norm, base_init
 from .base import SSLFramework
 
 
@@ -84,27 +84,21 @@ class SIDeRSVM(SSLFramework):
         self
             [description]
         """
-        # X, D = cat_data(Xl, Dl, Xu, Du)
-        # X = self.scaler.fit_transform(X)
-        n = X.shape[0]
-        # nl = y.shape[0]
-        Ka = np.dot(co_variates, co_variates.T)
-        K = pairwise_kernels(X, metric=self.kernel, filter_params=True, **self.kwargs)
-        K[np.isnan(K)] = 0
-
+        ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
+        ker_c = np.dot(co_variates, co_variates.T)
         y_ = self._lb.fit_transform(y)
 
-        I = np.eye(n)
-        H = I - 1. / n * np.ones((n, n))
+        Q_ = unit_mat.copy()
         if self.mu != 0:
             lap_mat = lap_norm(X, n_neighbour=self.k_neighbour,
                                metric=self.manifold_metric, mode=self.knn_mode)
-            Q_ = I + np.dot(self.lambda_ / np.square(n - 1) * multi_dot([H, Ka, H])
-                            + self.mu / np.square(n) * lap_mat, K)
+            Q_ += np.dot(self.lambda_ / np.square(n - 1) *
+                         multi_dot([ctr_mat, ker_c, ctr_mat])
+                         + self.mu / np.square(n) * lap_mat, ker_x)
         else:
-            Q_ = I + self.lambda_ / np.square(n - 1) * multi_dot([H, Ka, H, K])
+            Q_ += self.lambda_ * multi_dot([ctr_mat, ker_c, ctr_mat, ker_x]) / np.square(n - 1)
 
-        self.coef_, self.support_ = self._solve_semi_dual(K, y_, Q_, self.C, self.solver)
+        self.coef_, self.support_ = self._solve_semi_dual(ker_x, y_, Q_, self.C, self.solver)
 
         # if self._lb.y_type_ == 'binary':
         #     self.coef_, self.support_ = self._semi_binary_dual(K, y_, Q_,
@@ -147,8 +141,9 @@ class SIDeRSVM(SSLFramework):
             decision scores, shape (n_samples,) for binary classification, 
             (n_samples, n_class) for multi-class cases
         """
-        K = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
-        return np.dot(K, self.coef_)  # +self.intercept_
+        ker_x = pairwise_kernels(X, self.X, metric=self.kernel,
+                                 filter_params=True, **self.kwargs)
+        return np.dot(ker_x, self.coef_)  # +self.intercept_
 
     def predict(self, X):
         """Perform classification on samples in X.
@@ -258,31 +253,25 @@ class SIDeRLS(SSLFramework):
             [description]
         """
         # X, D = cat_data(Xl, Dl, Xu, Du)
-        n = X.shape[0]
         nl = y.shape[0]
-
+        ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
         if type(co_variates) == np.ndarray:
-            Kd = np.dot(co_variates, co_variates.T)
+            ker_c = np.dot(co_variates, co_variates.T)
         else:
-            Kd = np.zeros((n, n))
-        K = pairwise_kernels(X, metric=self.kernel, filter_params=True, **self.kwargs)
-        K[np.isnan(K)] = 0
+            ker_c = np.zeros((n, n))
 
         J = np.zeros((n, n))
         J[:nl, :nl] = np.eye(nl)
 
-        I = np.eye(n)
-        H = I - 1. / n * np.ones((n, n))
-
         if self.mu != 0:
             lap_mat = lap_norm(X, n_neighbour=self.k, mode=self.knn_mode,
                                metric=self.manifold_metric)
-            Q_ = self.sigma_ * I + np.dot(J + self.lambda_ / np.square(n - 1)
-                                          * multi_dot([H, Kd, H])
-                                          + self.mu / np.square(n) * lap_mat, K)
+            Q_ = self.sigma_ * unit_mat + np.dot(J + self.lambda_ / np.square(n - 1)
+                                                 * multi_dot([ctr_mat, ker_c, ctr_mat])
+                                                 + self.mu / np.square(n) * lap_mat, ker_x)
         else:
-            Q_ = self.sigma_ * I + np.dot(J + self.lambda_ / np.square(n - 1)
-                                          * multi_dot([H, Kd, H]), K)
+            Q_ = self.sigma_ * unit_mat + np.dot(J + self.lambda_ / np.square(n - 1)
+                                                 * multi_dot([ctr_mat, ker_c, ctr_mat]), ker_x)
 
         y_ = self._lb.fit_transform(y)
         self.coef_ = self._solve_semi_ls(Q_, y_)
@@ -307,8 +296,9 @@ class SIDeRLS(SSLFramework):
             (n_samples, n_class) for multi-class cases
         """
         
-        K = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
-        return np.dot(K, self.coef_)  # +self.intercept_
+        ker_x = pairwise_kernels(X, self.X, metric=self.kernel,
+                                 filter_params=True, **self.kwargs)
+        return np.dot(ker_x, self.coef_)  # +self.intercept_
 
     def predict(self, X):
         """Perform classification on samples in X.

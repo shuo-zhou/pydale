@@ -10,7 +10,6 @@ from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.utils.validation import check_is_fitted
 from sklearn.preprocessing import LabelBinarizer
 from ..utils import base_init
-# from sklearn.neighbors import kneighbors_graph
 
 
 class MIDA(BaseEstimator, TransformerMixin):
@@ -27,7 +26,7 @@ class MIDA(BaseEstimator, TransformerMixin):
         penalty : str
             None | 'l2' (default is None)
         lambda_ : float
-            regulization param (if penalty==l2)
+            regulisation param (if penalty==l2)
         mu: total captured variance param
         eta: label dependence param
             
@@ -58,28 +57,32 @@ class MIDA(BaseEstimator, TransformerMixin):
         co_variates : array-like
             Domain co-variates, shape (n_samples, n_co-variates)
 
-        Note:
+        Note
+        ----
             Unsupervised MIDA is performed if ys and yt are not given.
             Semi-supervised MIDA is performed is ys and yt are given.
         """
-        
-        K, I, H, n = base_init(X, kernel=self.kernel, **self.kwargs)
+        if self.aug and type(co_variates) == np.ndarray:
+            X = np.concatenate((X, co_variates), axis=1)
+        ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
         if type(co_variates) == np.ndarray:
-            Kd = np.dot(co_variates, co_variates.T)
+            ker_c = np.dot(co_variates, co_variates.T)
         else:
-            Kd = np.zeros((n, n))
+            ker_c = np.zeros((n, n))
         if y is not None:
-            y_ = self._lb.fit_transform(y)
-            Ky = np.dot(y_, y_.T)
-            obj = multi_dot([K, H, Kd, H, K.T])
-            st = multi_dot([K, H, (self.mu * I + self.eta * Ky), H, K.T])
+            y_mat = self._lb.fit_transform(y)
+            ker_y = np.dot(y_mat, y_mat.T)
+            obj = multi_dot([ker_x, ctr_mat, ker_c, ctr_mat, ker_x.T])
+            st = multi_dot([ker_x, ctr_mat, (self.mu * unit_mat
+                                             + self.eta * ker_y),
+                            ctr_mat, ker_x.T])
         # obj = np.trace(np.dot(K,L))
         else: 
-            obj = multi_dot([K, H, Kd, H, K.T])
-            st = multi_dot([K, H, K.T])
+            obj = multi_dot([ker_x, ctr_mat, ker_c, ctr_mat, ker_x.T])
+            st = multi_dot([ker_x, ctr_mat, ker_x.T])
             
         if self.penalty == 'l2':
-            obj -= self.lambda_ * I
+            obj -= self.lambda_ * unit_mat
 
         eig_values, eig_vectors = eig(obj, st)
         idx_sorted = eig_values.argsort()
@@ -92,24 +95,26 @@ class MIDA(BaseEstimator, TransformerMixin):
         self.X = X
         return self
 
-    def transform(self, X):
+    def transform(self, X, co_variates=None):
         """
         Parameters
         ----------
         X : array-like,
             shape (n_samples, n_features)
-
+        co_variates : array-like,
+            Domain co-variates, shape (n_samples, n_co-variates)
         Returns
         -------
         array-like
             transformed data
         """
         check_is_fitted(self, 'X')
-        X_fit = self.X
-        K = pairwise_kernels(X, X_fit, metric=self.kernel, filter_params=True, **self.kwargs)
-        U_ = self.U[:, :self.n_components]
-        X_transformed = np.dot(K, U_)
-        return X_transformed
+        if self.aug and type(co_variates) == np.ndarray:
+            X = np.concatenate((X, co_variates), axis=1)
+        ker_x = pairwise_kernels(X, self.X, metric=self.kernel,
+                                 filter_params=True, **self.kwargs)
+
+        return np.dot(ker_x, self.U[:, :self.n_components])
 
     def fit_transform(self, X, y=None, co_variates=None):
         """
@@ -128,7 +133,5 @@ class MIDA(BaseEstimator, TransformerMixin):
             transformed X_transformed
         """
         self.fit(X, y, co_variates)
-        X_transformed = self.transform(X)
-        if self.aug:
-            X_transformed = np.concatenate((X_transformed, co_variates), axis=1)
-        return X_transformed
+
+        return self.transform(X, co_variates)

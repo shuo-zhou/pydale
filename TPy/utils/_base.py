@@ -78,13 +78,14 @@ def mmd_coef(ns, nt, ys=None, yt=None, kind='marginal', mu=0.5):
 
 
 def base_init(X, kernel='linear', **kwargs):
+
     n = X.shape[0]
     # Construct kernel matrix
-    K = pairwise_kernels(X, metric=kernel, filter_params=True, **kwargs)
-    K[np.isnan(K)] = 0
+    ker_x = pairwise_kernels(X, metric=kernel, filter_params=True, **kwargs)
+    ker_x[np.isnan(ker_x)] = 0
 
-    I = np.eye(n)
+    unit_mat = np.eye(n)
     # Construct centering matrix
-    H = I - 1. / n * np.ones((n, n))
+    ctr_mat = unit_mat - 1. / n * np.ones((n, n))
 
-    return K, I, H, n
+    return ker_x, unit_mat, ctr_mat, n

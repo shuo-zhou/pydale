@@ -12,7 +12,7 @@ from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
-from ..utils import lap_norm
+from ..utils import lap_norm, base_init
 from ..utils.multiclass import score2pred
 from .base import SSLFramework
 
@@ -63,7 +63,7 @@ class LapSVM(SSLFramework):
         Parameters
         ----------
         X : array-like
-            Input data, shape (n_samples, n_feautres)
+            Input data, shape (n_samples, n_features)
         y : array-like
             Label,, shape (nl_samples, ) where nl_samples <= n_samples
             
@@ -72,20 +72,15 @@ class LapSVM(SSLFramework):
         self
             [description]
         """
-        n = X.shape[0]
-        # nl = y.shape[0]
-        K = pairwise_kernels(X, metric=self.kernel, filter_params=True, **self.kwargs)
-        K[np.isnan(K)] = 0
-
-        I = np.eye(n)
+        ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
         if self.gamma_ == 0:
-            Q_ = I
+            Q_ = ctr_mat
         else:
             lap_mat = lap_norm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode)
-            Q_ = I + self.gamma_ * np.dot(lap_mat, K)
+            Q_ = ctr_mat + self.gamma_ * np.dot(lap_mat, ker_x)
 
         y_ = self._lb.fit_transform(y)
-        self.coef_, self.support_ = self._solve_semi_dual(K, y_, Q_, self.C, self.solver)
+        self.coef_, self.support_ = self._solve_semi_dual(ker_x, y_, Q_, self.C, self.solver)
         # if self._lb.y_type_ == 'binary':
         #     self.support_vectors_ = X[:nl, :][self.support_]
         #     self.n_support_ = self.support_vectors_.shape[0]
@@ -96,7 +91,7 @@ class LapSVM(SSLFramework):
         #         self.support_vectors_.append(X[:nl, :][self.support_[i]][-1])
         #         self.n_support_.append(self.support_vectors_[-1].shape[0])
 
-        self._X = X
+        self.X = X
         self.y = y
 
         return self
@@ -107,7 +102,7 @@ class LapSVM(SSLFramework):
         Parameters
         ----------
         X : array-like
-            Input data, shape (n_samples, n_feautres)
+            Input data, shape (n_samples, n_features)
             
         Returns
         -------
@@ -115,12 +110,13 @@ class LapSVM(SSLFramework):
             decision scores, shape (n_samples,) for binary classification, 
             (n_samples, n_class) for multi-class cases
         """
-        check_is_fitted(self, '_X')
-        check_is_fitted(self, '_y')
-        # X_fit = self._X
-        K = pairwise_kernels(X, self._X, metric=self.kernel, filter_params=True, **self.kwargs)
+        check_is_fitted(self, 'X')
+        check_is_fitted(self, 'y')
+        # X_fit = self.X
+        ker_x = pairwise_kernels(X, self.X, metric=self.kernel,
+                                 filter_params=True, **self.kwargs)
 
-        return np.dot(K, self.coef_)  # +self.intercept_
+        return np.dot(ker_x, self.coef_)  # +self.intercept_
 
     def predict(self, X):
         """Perform classification on samples in X.
@@ -128,7 +124,7 @@ class LapSVM(SSLFramework):
         Parameters
         ----------
         X : array-like
-            Input data, shape (n_samples, n_feautres)
+            Input data, shape (n_samples, n_features)
             
         Returns
         -------
@@ -150,7 +146,7 @@ class LapSVM(SSLFramework):
         Parameters
         ----------
         X : array-like
-            Input data, shape (n_samples, n_feautres)
+            Input data, shape (n_samples, n_features)
         y : array-like
             Label,, shape (nl_samples, ) where nl_samples <= n_samples
         
@@ -207,7 +203,7 @@ class LapRLS(SSLFramework):
         Parameters
         ----------
         X : array-like
-            Input data, shape (n_samples, n_feautres)
+            Input data, shape (n_samples, n_features)
         y : array-like
             Label,, shape (nl_samples, ) where nl_samples <= n_samples
         
@@ -216,11 +212,8 @@ class LapRLS(SSLFramework):
         self
             [description]
         """
-        n = X.shape[0]
         nl = y.shape[0]
-        I = np.eye(n)
-        K = pairwise_kernels(X, metric=self.kernel, filter_params=True, **self.kwargs)
-        K[np.isnan(K)] = 0
+        ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
 
         J = np.zeros((n, n))
         J[:nl, :nl] = np.eye(nl)
@@ -228,14 +221,14 @@ class LapRLS(SSLFramework):
         if self.gamma_ != 0:
             lap_mat = lap_norm(X, n_neighbour=self.k_neighbour,
                                metric=self.manifold_metric, mode=self.knn_mode)
-            Q_ = np.dot((J + self.gamma_ * lap_mat), K) + self.sigma_ * I
+            Q_ = np.dot((J + self.gamma_ * lap_mat), ker_x) + self.sigma_ * unit_mat
         else:
-            Q_ = np.dot(J, K) + self.sigma_ * I
+            Q_ = np.dot(J, ker_x) + self.sigma_ * ctr_mat
 
         y_ = self._lb.fit_transform(y)
         self.coef_ = self._solve_semi_ls(Q_, y_)
 
-        self._X = X
+        self.X = X
         self.y = y
 
         return self
@@ -246,7 +239,7 @@ class LapRLS(SSLFramework):
         Parameters
         ----------
         X : array-like
-            Input data, shape (n_samples, n_feautres)
+            Input data, shape (n_samples, n_features)
             
         Returns
         -------
@@ -267,7 +260,7 @@ class LapRLS(SSLFramework):
         Parameters
         ----------
         X : array-like
-            Input data, shape (n_samples, n_feautres)
+            Input data, shape (n_samples, n_features)
             
         Returns
         -------
@@ -275,8 +268,8 @@ class LapRLS(SSLFramework):
             decision scores, shape (n_samples,) for binary classification, 
             (n_samples, n_class) for multi-class cases
         """
-        K = pairwise_kernels(X, self._X, metric=self.kernel, filter_params=True, **self.kwargs)
-        return np.dot(K, self.coef_)
+        ker_x = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
+        return np.dot(ker_x, self.coef_)
 
     def fit_predict(self, X, y):
         """Fit the model according to the given training data and then perform
@@ -285,7 +278,7 @@ class LapRLS(SSLFramework):
         Parameters
         ----------
         X : array-like
-            Input data, shape (n_samples, n_feautres)
+            Input data, shape (n_samples, n_features)
         y : array-like
             Label,, shape (nl_samples, ) where nl_samples <= n_samples
         
