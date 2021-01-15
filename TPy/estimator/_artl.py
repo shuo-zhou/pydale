@@ -6,8 +6,8 @@ from numpy.linalg import multi_dot
 from sklearn.utils.validation import check_is_fitted
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
-from ..utils.mmd import mmd_coef
 from ..utils.multiclass import score2pred
+from ..utils import lap_norm, mmd_coef
 from .base import SSLFramework
 # =============================================================================
 # Adaptation Regularisation Transfer Learning: ARTL
@@ -129,8 +129,8 @@ class ARSVM(SSLFramework):
         y_ = self._lb.fit_transform(y)
 
         if self.gamma_ != 0:
-            L = self._lapnorm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode)
-            Q_ = I + multi_dot([(self.lambda_ * M + self.gamma_ * L), K])
+            lap_mat = lap_norm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode)
+            Q_ = I + multi_dot([(self.lambda_ * M + self.gamma_ * lap_mat), K])
         else:
             Q_ = I + multi_dot([(self.lambda_ * M), K])
 
@@ -145,8 +145,8 @@ class ARSVM(SSLFramework):
         #         self.support_vectors_.append(X[:nl, :][self.support_[i]][-1])
         #         self.n_support_.append(self.support_vectors_[-1].shape[0])
 
-        self._X = X
-        self._y = y
+        self.X = X
+        self.y = y
 
         return self
 
@@ -166,8 +166,8 @@ class ARSVM(SSLFramework):
         """
         check_is_fitted(self, '_X')
         check_is_fitted(self, '_y')
-        # X_fit = self._X
-        K = pairwise_kernels(X, self._X, metric=self.kernel, filter_params=True, **self.kwargs)
+        # X_fit = self.X
+        K = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
 
         return np.dot(K, self.coef_)  # +self.intercept_
 
@@ -210,7 +210,7 @@ class ARSVM(SSLFramework):
         """
         self.fit(Xs, ys, Xt, yt)
 
-        return self.predict(self._X)
+        return self.predict(self.X)
 
 
 class ARRLS(SSLFramework):
@@ -280,9 +280,9 @@ class ARRLS(SSLFramework):
         J[:nl, :nl] = np.eye(nl)
 
         if self.gamma_ != 0:
-            L = self._lapnorm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode,
-                        metric=self.manifold_metric)
-            Q_ = np.dot((J + self.lambda_ * M + self.gamma_ * L),
+            lap_mat = lap_norm(X, n_neighbour=self.k_neighbour,
+                               metric=self.manifold_metric, mode=self.knn_mode)
+            Q_ = np.dot((J + self.lambda_ * M + self.gamma_ * lap_mat),
                         K) + self.sigma_ * I
         else:
             Q_ = np.dot((J + self.lambda_ * M), K) + self.sigma_ * I
@@ -290,8 +290,8 @@ class ARRLS(SSLFramework):
         y_ = self._lb.fit_transform(y)
         self.coef_ = self._solve_semi_ls(Q_, y_)
 
-        self._X = X
-        self._y = y
+        self.X = X
+        self.y = y
 
         return self
 
@@ -327,7 +327,7 @@ class ARRLS(SSLFramework):
         array-like
             prediction scores, shape (n_samples)
         """
-        K = pairwise_kernels(X, self._X, metric=self.kernel, filter_params=True, **self.kwargs)
+        K = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
         return np.dot(K, self.coef_)  
 
     def fit_predict(self, Xs, ys, Xt, yt=None):

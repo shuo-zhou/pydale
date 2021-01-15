@@ -12,7 +12,7 @@ from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
-
+from ..utils import lap_norm
 from ..utils.multiclass import score2pred
 from .base import SSLFramework
 
@@ -81,8 +81,8 @@ class LapSVM(SSLFramework):
         if self.gamma_ == 0:
             Q_ = I
         else:
-            L = self._lapnorm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode)
-            Q_ = I + self.gamma_ * np.dot(L, K)
+            lap_mat = lap_norm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode)
+            Q_ = I + self.gamma_ * np.dot(lap_mat, K)
 
         y_ = self._lb.fit_transform(y)
         self.coef_, self.support_ = self._solve_semi_dual(K, y_, Q_, self.C, self.solver)
@@ -97,7 +97,7 @@ class LapSVM(SSLFramework):
         #         self.n_support_.append(self.support_vectors_[-1].shape[0])
 
         self._X = X
-        self._y = y
+        self.y = y
 
         return self
 
@@ -226,9 +226,9 @@ class LapRLS(SSLFramework):
         J[:nl, :nl] = np.eye(nl)
 
         if self.gamma_ != 0:
-            L = self._lapnorm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode,
-                        metric=self.manifold_metric)
-            Q_ = np.dot((J + self.gamma_ * L), K) + self.sigma_ * I
+            lap_mat = lap_norm(X, n_neighbour=self.k_neighbour,
+                               metric=self.manifold_metric, mode=self.knn_mode)
+            Q_ = np.dot((J + self.gamma_ * lap_mat), K) + self.sigma_ * I
         else:
             Q_ = np.dot(J, K) + self.sigma_ * I
 
@@ -236,7 +236,7 @@ class LapRLS(SSLFramework):
         self.coef_ = self._solve_semi_ls(Q_, y_)
 
         self._X = X
-        self._y = y
+        self.y = y
 
         return self
 
