@@ -1,14 +1,14 @@
 from setuptools import setup
 
 setup(
-    name='TPy',
+    name='pydale',
     version='0.1.0a1',
     description='A Transfer Learning Python package',
     url='https://github.com/sz144/TPy',
     author='Shuo Zhou',
     author_email='szhou20@sheffield.ac.uk',
     license='MIT License',
-    packages=['TPy'],
+    packages=['pydale'],
     install_requires=['numpy', 'scipy', 'pandas',
                       'scikit-learn', 'cvxopt', 'osqp'
                       ],
