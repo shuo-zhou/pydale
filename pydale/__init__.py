@@ -1,5 +1,5 @@
 """
-TPy.
+pydale.
 
 A Transfer Learning Python package
 """

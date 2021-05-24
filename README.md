@@ -1,5 +1,5 @@
-# TPy
-A python library of (non-deep) transfer learning/domain adaptation.
+# PyDALE
+A Domain Adaptation LEarning Python library.
  <!-- and tensor (multi-linear) regression -->
 
 This package contains implementations of the following methods:
@@ -28,7 +28,7 @@ This package contains implementations of the following methods:
 
 ##### Learning low-dimensional embedding for input data `X`
 ```
-From TPy.transformer.tca import TCA
+From pydale.transformer.tca import TCA
 
 transformer = TCA(n_components=2)
 X_transformed = transformer.fit_transform(X)
@@ -39,7 +39,7 @@ X_transformed = transformer.fit_transform(X)
 Example 1: Using Manifold Regularisation Learning Framework
 ```
 import numpy as np
-From TPy.estimator.manifold_learn import LapSVM
+From pydale.estimator.manifold_learn import LapSVM
 
 clf = LapSVM()
 clf.fit(np.concatnate((Xs, Xt)), ys)
@@ -48,7 +48,7 @@ y_pred = clf.predict(Xt)
 
 Example 2: Using Adaptation Regularisation Learning Framework
 ```
-From TPy.estimator.artl import ARSVM
+From pydale.estimator.artl import ARSVM
 
 clf = ARSVM()
 clf.fit(Xs, ys, Xt)
@@ -57,7 +57,7 @@ y_pred = clf.predict(Xt)
 
 Example 3: Using Side Information Dependence Regularisation Learning Framework
 ```
-From TPy.estimator.sider import SIDeRSVM
+From pydale.estimator.sider import SIDeRSVM
 
 ns = Xs.shape[0]
 nt = Xt.shape[0]
