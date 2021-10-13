@@ -5,6 +5,7 @@ import numpy as np
 from scipy.linalg import eig
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import pairwise_kernels
+from sklearn.preprocessing import KernelCenterer
 from ..utils import mmd_coef, base_init
 # from sklearn.preprocessing import StandardScaler
 # =============================================================================
@@ -41,40 +42,41 @@ class JDA(BaseEstimator, TransformerMixin):
         self.kernel = kernel
         self.lambda_ = lambda_
         self.mu = mu
+        self._centerer = KernelCenterer()
 
-    def fit(self, Xs, ys=None, Xt=None, yt=None):
+    def fit(self, xs, ys=None, xt=None, yt=None):
         """
 
         Parameters
         ----------
-        Xs : array-like
+        xs : array-like
             Source domain data, shape (ns_samples, n_features).
         ys : array-like, optional
             Source domain labels, shape (ns_samples,), by default None.
-        Xt : array-like
+        xt : array-like
             Target domain data, shape (nt_samples, n_features), by default None.
         yt : array-like, optional
             Target domain labels, shape (nt_samples,), by default None.
         """
-        if type(Xt) == np.ndarray:
-            X = np.vstack((Xs, Xt))
-            ns = Xs.shape[0]
-            nt = Xt.shape[0]
+        if type(xt) == np.ndarray:
+            X = np.vstack((xs, xt))
+            ns = xs.shape[0]
+            nt = xt.shape[0]
 
             if ys is not None and yt is not None:
                 L = mmd_coef(ns, nt, ys, yt, kind='joint', mu=self.mu)
             else:
                 L = mmd_coef(ns, nt, kind='marginal', mu=0)
         else:
-            X = Xs
+            X = xs
             L = np.zeros((X.shape[0], X.shape[0]))
 
-        ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
-
+        krnl_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
+        krnl_x = self._centerer.fit_transform(krnl_x)
         # objective for optimization
-        obj = np.dot(np.dot(ker_x, L), ker_x.T) + self.lambda_ * unit_mat
+        obj = np.dot(np.dot(krnl_x, L), krnl_x.T) + self.lambda_ * unit_mat
         # constraint subject to
-        st = np.dot(np.dot(ker_x, ctr_mat), ker_x.T)
+        st = np.dot(np.dot(krnl_x, ctr_mat), krnl_x.T)
         eig_values, eig_vectors = eig(obj, st)
         
         ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
@@ -84,16 +86,16 @@ class JDA(BaseEstimator, TransformerMixin):
         U = np.zeros(eig_vectors.shape)
         U[:, :] = eig_vectors[:, idx_sorted]
         self.U = np.asarray(U, dtype=np.float)
-        self.Xs = Xs
-        self.Xt = Xt
+        self.xs = xs
+        self.xt = xt
 
         return self
     
-    def transform(self, X):
+    def transform(self, x):
         """
         Parameters
         ----------
-        X : array-like,
+        x : array-like,
             shape (n_samples, n_features)
 
         Returns
@@ -104,20 +106,20 @@ class JDA(BaseEstimator, TransformerMixin):
         # X = self.scaler.transform(X)
         # check_is_fitted(self, 'Xs')
         # check_is_fitted(self, 'Xt')
-        X_fit = np.vstack((self.Xs, self.Xt))
-        ker_x = pairwise_kernels(X, X_fit, metric=self.kernel, filter_params=True, **self.kwargs)
+        x_fit = np.vstack((self.xs, self.xt))
+        ker_x = pairwise_kernels(x, x_fit, metric=self.kernel, filter_params=True, **self.kwargs)
 
         return np.dot(ker_x, self.U[:, :self.n_components])
     
-    def fit_transform(self, Xs, ys=None, Xt=None, yt=None):
+    def fit_transform(self, xs, ys=None, xt=None, yt=None):
         """
         Parameters
         ----------
-        Xs : array-like
+        xs : array-like
             Source domain data, shape (ns_samples, n_features).
         ys : array-like, optional
             Source domain labels, shape (ns_samples,), by default None.
-        Xt : array-like
+        xt : array-like
             Target domain data, shape (nt_samples, n_features), by default None.
         yt : array-like, optional
             Target domain labels, shape (nt_samples,), by default None.
@@ -127,6 +129,6 @@ class JDA(BaseEstimator, TransformerMixin):
         array-like
             transformed Xs_transformed, Xt_transformed
         """
-        self.fit(Xs, ys, Xt, yt)
+        self.fit(xs, ys, xt, yt)
 
-        return self.transform(Xs), self.transform(Xt)
+        return self.transform(xs), self.transform(xt)

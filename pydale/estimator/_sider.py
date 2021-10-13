@@ -10,16 +10,13 @@ In Proceedings of the 34th AAAI Conference on Artificial Intelligence (AAAI 2020
 
 import numpy as np
 from numpy.linalg import multi_dot
-from sklearn.metrics.pairwise import pairwise_kernels
-from sklearn.preprocessing import LabelBinarizer
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
-from ..utils.multiclass import score2pred
 from ..utils import lap_norm, base_init
-from .base import SSLFramework
+from .base import BaseFramework
 
 
-class SIDeRSVM(SSLFramework):
+class SIDeRSVM(BaseFramework):
     def __init__(self, C=1.0, kernel='linear', lambda_=1.0, mu=0.0, k_neighbour=3,
                  manifold_metric='cosine', knn_mode='distance', solver='osqp', **kwargs):
         """Side Information Dependence Regularised Support Vector Machine
@@ -49,34 +46,29 @@ class SIDeRSVM(SSLFramework):
         solver : str, optional
             quadratic programming solver, [cvxopt, osqp], by default 'osqp'
         """
-        self.kwargs = kwargs
-        self.kernel = kernel
+        super().__init__(kernel, **kwargs)
         self.lambda_ = lambda_
         self.mu = mu
         self.C = C
         self.solver = solver
         # self.scaler = StandardScaler()
-        # self.coef_ = None
-        # self.X = None
-        # self.y = None
         # self.support_ = None
         # self.support_vectors_ = None
         # self.n_support_ = None
         self.manifold_metric = manifold_metric
         self.k_neighbour = k_neighbour
         self.knn_mode = knn_mode
-        self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
 
-    def fit(self, X, y, co_variates=None):
+    def fit(self, x, y, covariates=None):
         """Fit the model according to the given training data.
 
         Parameters
         ----------
-        X : array-like
+        x : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
             Label,, shape (nl_samples, ) where nl_samples <= n_samples
-        co_variates : array-like,
+        covariates : array-like,
             Domain co-variate matrix for input data, shape (n_samples, n_co-variates)
 
         Returns
@@ -84,21 +76,21 @@ class SIDeRSVM(SSLFramework):
         self
             [description]
         """
-        ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
-        ker_c = np.dot(co_variates, co_variates.T)
+        krnl_x, unit_mat, ctr_mat, n = base_init(x, kernel=self.kernel, **self.kwargs)
+        krnl_c = np.dot(covariates, covariates.T)
         y_ = self._lb.fit_transform(y)
 
         Q_ = unit_mat.copy()
         if self.mu != 0:
-            lap_mat = lap_norm(X, n_neighbour=self.k_neighbour,
+            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour,
                                metric=self.manifold_metric, mode=self.knn_mode)
             Q_ += np.dot(self.lambda_ / np.square(n - 1) *
-                         multi_dot([ctr_mat, ker_c, ctr_mat])
-                         + self.mu / np.square(n) * lap_mat, ker_x)
+                         multi_dot([ctr_mat, krnl_c, ctr_mat])
+                         + self.mu / np.square(n) * lap_mat, krnl_x)
         else:
-            Q_ += self.lambda_ * multi_dot([ctr_mat, ker_c, ctr_mat, ker_x]) / np.square(n - 1)
+            Q_ += self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat, krnl_x]) / np.square(n - 1)
 
-        self.coef_, self.support_ = self._solve_semi_dual(ker_x, y_, Q_, self.C, self.solver)
+        self.coef_, self.support_ = self._solve_semi_dual(krnl_x, y_, Q_, self.C, self.solver)
 
         # if self._lb.y_type_ == 'binary':
         #     self.coef_, self.support_ = self._semi_binary_dual(K, y_, Q_,
@@ -122,60 +114,20 @@ class SIDeRSVM(SSLFramework):
         #         self.n_support_.append(self.support_vectors_[-1].shape[0])
         #     self.coef_ = np.concatenate(coef_list, axis=1)
 
-        self.X = X
-        self.y = y
+        self.x = x
 
         return self
 
-    def decision_function(self, X):
+    def fit_predict(self, x, y, covariates):
         """[summary]
 
         Parameters
         ----------
-        X : array-like
-            Input data, shape (n_samples, n_features)
-            
-        Returns
-        -------
-        array-like
-            decision scores, shape (n_samples,) for binary classification, 
-            (n_samples, n_class) for multi-class cases
-        """
-        ker_x = pairwise_kernels(X, self.X, metric=self.kernel,
-                                 filter_params=True, **self.kwargs)
-        return np.dot(ker_x, self.coef_)  # +self.intercept_
-
-    def predict(self, X):
-        """Perform classification on samples in X.
-
-        Parameters
-        ----------
-        X : array-like
-            Input data, shape (n_samples, n_features)
-            
-        Returns
-        -------
-        array-like
-            predicted labels, shape (n_samples,)
-        """
-        dec = self.decision_function(X)
-        if self._lb.y_type_ == 'binary':
-            y_pred_ = np.sign(dec).reshape(-1, 1)
-        else:
-            y_pred_ = score2pred(dec)
-
-        return self._lb.inverse_transform(y_pred_)
-
-    def fit_predict(self, X, y, co_variates):
-        """[summary]
-
-        Parameters
-        ----------
-        X : array-like
+        x : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
             Label,, shape (nl_samples, ) where nl_samples <= n_samples
-        co_variates : array-like,
+        covariates : array-like,
             Domain co-variate matrix for input data, shape (n_samples, n_co-variates)
 
         Returns
@@ -183,11 +135,11 @@ class SIDeRSVM(SSLFramework):
         array-like
             predicted labels, shape (n_samples,)
         """
-        self.fit(X, y, co_variates)
-        return self.predict(X)
+        self.fit(x, y, covariates)
+        return self.predict(x)
 
 
-class SIDeRLS(SSLFramework):
+class SIDeRLS(BaseFramework):
     def __init__(self, sigma_=1.0, lambda_=1.0, mu=0.0, kernel='linear', 
                  k=3, knn_mode='distance', manifold_metric='cosine', 
                  class_weight=None, **kwargs):
@@ -220,31 +172,25 @@ class SIDeRLS(SSLFramework):
         **kwargs: 
             kernel param
         """
-        self.kernel = kernel
+        super().__init__(kernel, **kwargs)
         self.sigma_ = sigma_
         self.lambda_ = lambda_
         self.mu = mu
-        # self.classes = None
-        # self.coef_ = None
-        # self.X = None
-        # self.y = None
         self.manifold_metric = manifold_metric
         self.k = k
         self.knn_mode = knn_mode
         self.class_weight = class_weight
-        self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
-        self.kwargs = kwargs
-
-    def fit(self, X, y, co_variates=None):
+        
+    def fit(self, x, y, covariates=None):
         """Fit the model according to the given training data.
 
         Parameters
         ----------
-        X : array-like
+        x : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
             Label,, shape (nl_samples, ) where nl_samples <= n_samples
-        co_variates : array-like,
+        covariates : array-like,
             Domain co-variate matrix for input data, shape (n_samples, n_co-variates)
 
         Returns
@@ -254,9 +200,9 @@ class SIDeRLS(SSLFramework):
         """
         # X, D = cat_data(Xl, Dl, Xu, Du)
         nl = y.shape[0]
-        ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
-        if type(co_variates) == np.ndarray:
-            ker_c = np.dot(co_variates, co_variates.T)
+        ker_x, unit_mat, ctr_mat, n = base_init(x, kernel=self.kernel, **self.kwargs)
+        if type(covariates) == np.ndarray:
+            ker_c = np.dot(covariates, covariates.T)
         else:
             ker_c = np.zeros((n, n))
 
@@ -264,7 +210,7 @@ class SIDeRLS(SSLFramework):
         J[:nl, :nl] = np.eye(nl)
 
         if self.mu != 0:
-            lap_mat = lap_norm(X, n_neighbour=self.k, mode=self.knn_mode,
+            lap_mat = lap_norm(x, n_neighbour=self.k, mode=self.knn_mode,
                                metric=self.manifold_metric)
             Q_ = self.sigma_ * unit_mat + np.dot(J + self.lambda_ / np.square(n - 1)
                                                  * multi_dot([ctr_mat, ker_c, ctr_mat])
@@ -276,62 +222,21 @@ class SIDeRLS(SSLFramework):
         y_ = self._lb.fit_transform(y)
         self.coef_ = self._solve_semi_ls(Q_, y_)
 
-        self.X = X
-        self.y = y
+        self.x = x
 
         return self
 
-    def decision_function(self, X):
-        """Evaluates the decision function for the samples in X.
-
-        Parameters
-        ----------
-        X : array-like
-            Input data, shape (n_samples, n_features)
-            
-        Returns
-        -------
-        array-like
-            decision scores, shape (n_samples,) for binary classification, 
-            (n_samples, n_class) for multi-class cases
-        """
-        
-        ker_x = pairwise_kernels(X, self.X, metric=self.kernel,
-                                 filter_params=True, **self.kwargs)
-        return np.dot(ker_x, self.coef_)  # +self.intercept_
-
-    def predict(self, X):
-        """Perform classification on samples in X.
-
-        Parameters
-        ----------
-        X : array-like
-            Input data, shape (n_samples, n_features)
-            
-        Returns
-        -------
-        array-like
-            predicted labels, shape (n_samples,)
-        """
-        dec = self.decision_function(X)
-        if self._lb.y_type_ == 'binary':
-            y_pred_ = np.sign(dec).reshape(-1, 1)
-        else:
-            y_pred_ = score2pred(dec)
-
-        return self._lb.inverse_transform(y_pred_)
-
-    def fit_predict(self, X, y, co_variates=None):
+    def fit_predict(self, x, y, covariates=None):
         """Fit the model according to the given training data and then perform
             classification on samples in X.
 
         Parameters
         ----------
-        X : array-like
+        x : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
             Label,, shape (nl_samples, ) where nl_samples <= n_samples
-        co_variates : array-like,
+        covariates : array-like,
             Domain co-variate matrix for input data, shape (n_samples, n_co-variates)
 
         Returns
@@ -339,5 +244,5 @@ class SIDeRLS(SSLFramework):
         array-like
             predicted labels, shape (n_samples,)
         """
-        self.fit(X, y, co_variates)
-        return self.predict(X)
+        self.fit(x, y, covariates)
+        return self.predict(x)

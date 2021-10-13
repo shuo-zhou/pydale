@@ -7,17 +7,13 @@ Journal of machine learning research, 7(Nov), 2399-2434.
 """
 
 import numpy as np
-from sklearn.utils.validation import check_is_fitted
-from sklearn.metrics.pairwise import pairwise_kernels
-from sklearn.preprocessing import LabelBinarizer
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
 from ..utils import lap_norm, base_init
-from ..utils.multiclass import score2pred
-from .base import SSLFramework
+from .base import BaseFramework
 
 
-class LapSVM(SSLFramework):
+class LapSVM(BaseFramework):
     def __init__(self, C=1.0, kernel='linear', gamma_=1.0, solver='osqp', k_neighbour=3,
                  manifold_metric='cosine', knn_mode='distance', **kwargs):
         """Laplacian Regularized Support Vector Machine
@@ -47,22 +43,20 @@ class LapSVM(SSLFramework):
         **kwargs: 
             kernel param
         """
+        super().__init__(kernel, **kwargs)
         self.C = C
         self.gamma_ = gamma_
-        self.kernel = kernel
         self.solver = solver
-        self.kwargs = kwargs
         self.manifold_metric = manifold_metric
         self.k_neighbour = k_neighbour
         self.knn_mode = knn_mode
-        self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
 
-    def fit(self, X, y):
+    def fit(self, x, y):
         """Fit the model according to the given training data.
 
         Parameters
         ----------
-        X : array-like
+        x : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
             Label,, shape (nl_samples, ) where nl_samples <= n_samples
@@ -72,11 +66,11 @@ class LapSVM(SSLFramework):
         self
             [description]
         """
-        ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
+        ker_x, unit_mat, ctr_mat, n = base_init(x, kernel=self.kernel, **self.kwargs)
         if self.gamma_ == 0:
             Q_ = ctr_mat
         else:
-            lap_mat = lap_norm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode)
+            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour, mode=self.knn_mode)
             Q_ = ctr_mat + self.gamma_ * np.dot(lap_mat, ker_x)
 
         y_ = self._lb.fit_transform(y)
@@ -91,61 +85,17 @@ class LapSVM(SSLFramework):
         #         self.support_vectors_.append(X[:nl, :][self.support_[i]][-1])
         #         self.n_support_.append(self.support_vectors_[-1].shape[0])
 
-        self.X = X
-        self.y = y
+        self.x = x
 
         return self
 
-    def decision_function(self, X):
-        """Evaluates the decision function for the samples in X.
-
-        Parameters
-        ----------
-        X : array-like
-            Input data, shape (n_samples, n_features)
-            
-        Returns
-        -------
-        array-like
-            decision scores, shape (n_samples,) for binary classification, 
-            (n_samples, n_class) for multi-class cases
-        """
-        check_is_fitted(self, 'X')
-        check_is_fitted(self, 'y')
-        # X_fit = self.X
-        ker_x = pairwise_kernels(X, self.X, metric=self.kernel,
-                                 filter_params=True, **self.kwargs)
-
-        return np.dot(ker_x, self.coef_)  # +self.intercept_
-
-    def predict(self, X):
-        """Perform classification on samples in X.
-
-        Parameters
-        ----------
-        X : array-like
-            Input data, shape (n_samples, n_features)
-            
-        Returns
-        -------
-        array-like
-            predicted labels, shape (n_samples,)
-        """
-        dec = self.decision_function(X)
-        if self._lb.y_type_ == 'binary':
-            y_pred_ = np.sign(dec).reshape(-1, 1)
-        else:
-            y_pred_ = score2pred(dec)
-
-        return self._lb.inverse_transform(y_pred_)
-
-    def fit_predict(self, X, y):
+    def fit_predict(self, x, y):
         """Fit the model according to the given training data and then perform
             classification on samples in X.
 
         Parameters
         ----------
-        X : array-like
+        x : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
             Label,, shape (nl_samples, ) where nl_samples <= n_samples
@@ -155,11 +105,11 @@ class LapSVM(SSLFramework):
         array-like
             predicted labels, shape (n_samples,)
         """
-        self.fit(X, y)
-        return self.predict(X)
+        self.fit(x, y)
+        return self.predict(x)
 
 
-class LapRLS(SSLFramework):
+class LapRLS(BaseFramework):
     def __init__(self, kernel='linear', gamma_=1.0, sigma_=1.0, k_neighbour=5,
                  manifold_metric='cosine', knn_mode='distance', **kwargs):
         """Laplacian Regularized Least Squares
@@ -187,22 +137,20 @@ class LapRLS(SSLFramework):
         kwargs: 
             kernel params
         """
-        self.kwargs = kwargs
-        self.kernel = kernel
+        super().__init__(kernel, **kwargs)
         self.gamma_ = gamma_
         self.sigma_ = sigma_
         self.k_neighbour = k_neighbour
         # self.coef_ = None
         self.knn_mode = knn_mode
         self.manifold_metric = manifold_metric
-        self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
 
-    def fit(self, X, y):
+    def fit(self, x, y):
         """"Fit the model according to the given training data.
 
         Parameters
         ----------
-        X : array-like
+        x : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
             Label,, shape (nl_samples, ) where nl_samples <= n_samples
@@ -213,13 +161,13 @@ class LapRLS(SSLFramework):
             [description]
         """
         nl = y.shape[0]
-        ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
+        ker_x, unit_mat, ctr_mat, n = base_init(x, kernel=self.kernel, **self.kwargs)
 
         J = np.zeros((n, n))
         J[:nl, :nl] = np.eye(nl)
 
         if self.gamma_ != 0:
-            lap_mat = lap_norm(X, n_neighbour=self.k_neighbour,
+            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour,
                                metric=self.manifold_metric, mode=self.knn_mode)
             Q_ = np.dot((J + self.gamma_ * lap_mat), ker_x) + self.sigma_ * unit_mat
         else:
@@ -228,56 +176,17 @@ class LapRLS(SSLFramework):
         y_ = self._lb.fit_transform(y)
         self.coef_ = self._solve_semi_ls(Q_, y_)
 
-        self.X = X
-        self.y = y
+        self.x = x
 
         return self
 
-    def predict(self, X):
-        """Perform classification on samples in X.
-
-        Parameters
-        ----------
-        X : array-like
-            Input data, shape (n_samples, n_features)
-            
-        Returns
-        -------
-        array-like
-            predicted labels, shape (n_samples,)
-        """
-        dec = self.decision_function(X)
-        if self._lb.y_type_ == 'binary':
-            y_pred_ = np.sign(dec).reshape(-1, 1)
-        else:
-            y_pred_ = score2pred(dec)
-
-        return self._lb.inverse_transform(y_pred_)
-
-    def decision_function(self, X):
-        """Evaluates the decision function for the samples in X
-
-        Parameters
-        ----------
-        X : array-like
-            Input data, shape (n_samples, n_features)
-            
-        Returns
-        -------
-        array-like
-            decision scores, shape (n_samples,) for binary classification, 
-            (n_samples, n_class) for multi-class cases
-        """
-        ker_x = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
-        return np.dot(ker_x, self.coef_)
-
-    def fit_predict(self, X, y):
+    def fit_predict(self, x, y):
         """Fit the model according to the given training data and then perform
             classification on samples in X.
 
         Parameters
         ----------
-        X : array-like
+        x : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
             Label,, shape (nl_samples, ) where nl_samples <= n_samples
@@ -287,6 +196,6 @@ class LapRLS(SSLFramework):
         array-like
             predicted labels, shape (n_samples,)
         """
-        self.fit(X, y)
+        self.fit(x, y)
 
-        return self.predict(X)
+        return self.predict(x)

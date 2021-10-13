@@ -1,0 +1,14 @@
+*/**/__pycache__
+*/__pycache__
+*.iml
+*.json
+*.pt
+*.pth
+*.pyc
+*.zip
+*.xml
+
+TPy_/
+
+# Jupyter Notebook Checkpoints
+*-checkpoint.ipynb

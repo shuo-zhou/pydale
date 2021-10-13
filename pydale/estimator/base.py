@@ -3,13 +3,23 @@ import numpy as np
 from numpy.linalg import multi_dot, inv
 import scipy.sparse as sparse
 from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.metrics.pairwise import pairwise_kernels
+from sklearn.preprocessing import LabelBinarizer
+from sklearn.utils.validation import check_is_fitted
 from cvxopt import matrix, solvers
 import osqp
 
 
-class SSLFramework(BaseEstimator, ClassifierMixin):
+class BaseFramework(BaseEstimator, ClassifierMixin):
     """Semi-supervised Learning Framework
     """
+    def __init__(self, kernel, **kwargs) -> None:
+        super().__init__()
+        self.kernel = kernel
+        self.coef_ = None
+        self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
+        self.kwargs = kwargs
+        self.x = None
 
     @classmethod
     def _solve_semi_dual(cls, K, y, Q_, C, solver='osqp'):
@@ -163,12 +173,52 @@ class SSLFramework(BaseEstimator, ClassifierMixin):
             [description]
         """
         n = Q.shape[0]
-        nl = y.shape[0]
+        n_labeled = y.shape[0]
         Q_inv = inv(Q)
         if len(y.shape) == 1:
             y_ = np.zeros(n)
-            y_[:nl] = y[:]
+            y_[:n_labeled] = y[:]
         else:
             y_ = np.zeros((n, y.shape[1]))
-            y_[:nl, :] = y[:, :]
+            y_[:n_labeled, :] = y[:, :]
         return np.dot(Q_inv, y_)
+    
+    def predict(self, x):
+        """Perform classification on samples in x.
+
+        Parameters
+        ----------
+        x : array-like
+            Input data, shape (n_samples, n_features)
+            
+        Returns
+        -------
+        array-like
+            predicted labels, shape (n_samples,)
+        """
+        dec_scores = self.decision_function(x)
+        # if self._lb.y_type_ == 'binary':
+        #     y_pred = self._lb.inverse_transform(np.sign(dec_scores).reshape(-1, 1))
+        # else:
+        #     y_pred = self._lb.inverse_transform(dec_scores)
+        y_pred = self._lb.inverse_transform(dec_scores)
+
+        return y_pred
+
+    def decision_function(self, x):
+        """Evaluates the decision function for the samples in x
+
+        Parameters
+        ----------
+        x : array-like
+            Input data, shape (n_samples, n_features)
+            
+        Returns
+        -------
+        array-like
+            decision scores, shape (n_samples,) for binary classification, 
+            (n_samples, n_class) for multi-class cases
+        """
+        check_is_fitted(self, 'x')
+        krnl_x = pairwise_kernels(x, self.x, metric=self.kernel, filter_params=True, **self.kwargs)
+        return np.dot(krnl_x, self.coef_) 
