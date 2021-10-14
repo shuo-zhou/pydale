@@ -65,8 +65,8 @@ def _init_artl(xs, ys, xt=None, yt=None, **kwargs):
 
 
 class ARSVM(BaseFramework):
-    def __init__(self, C=1.0, kernel='linear', lambda_=1.0, gamma_=0.0, k_neighbour=5,
-                 solver='osqp', manifold_metric='cosine', knn_mode='distance', **kwargs):
+    def __init__(self, C=1.0, kernel='linear', lambda_=1.0, gamma_=0.0, k_neighbour=5, manifold_metric='cosine',
+                 knn_mode='distance', solver='osqp', **kwargs):
         """Adaptation Regularised Support Vector Machine
 
         Parameters
@@ -96,7 +96,7 @@ class ARSVM(BaseFramework):
         kwargs :
             kernel param
         """
-        super().__init__(kernel, **kwargs)
+        super().__init__(kernel, k_neighbour, manifold_metric, knn_mode, **kwargs)
         self.lambda_ = lambda_
         self.C = C
         self.gamma_ = gamma_
@@ -105,6 +105,7 @@ class ARSVM(BaseFramework):
         # self.alpha = None
         self.knn_mode = knn_mode
         self.manifold_metric = manifold_metric
+        self.support_ = None
         # self.scaler = StandardScaler()
 
     def fit(self, xs, ys, xt=None, yt=None):
@@ -122,24 +123,25 @@ class ARSVM(BaseFramework):
         yt : array-like, optional
             Target label, shape (ntl_samples, ), by default None
         """
-        x, y, ker_x, M, unit_mat = _init_artl(xs, ys, xt, yt, metric=self.kernel, filter_params=True, **self.kwargs)
+        x, y, krnl_x, M, unit_mat = _init_artl(xs, ys, xt, yt, metric=self.kernel, filter_params=True, **self.kwargs)
 
-        y_ = self._lb.fit_transform(y)
+        y_transformed = self._lb.fit_transform(y)
 
+        Q = unit_mat.copy()
         if self.gamma_ != 0:
             lap_mat = lap_norm(x, n_neighbour=self.k_neighbour, mode=self.knn_mode)
-            Q_ = unit_mat + multi_dot([(self.lambda_ * M + self.gamma_ * lap_mat), ker_x])
+            Q += multi_dot([(self.lambda_ * M + self.gamma_ * lap_mat), krnl_x])
         else:
-            Q_ = unit_mat + multi_dot([(self.lambda_ * M), ker_x])
+            Q += self.lambda_ * np.dot(M, krnl_x)
 
-        self.coef_, self.support_ = self._solve_semi_dual(ker_x, y_, Q_, self.C, self.solver)
+        self.coef_, self.support_ = self._solve_semi_dual(krnl_x, y_transformed, Q, self.C, self.solver)
         # if self._lb.y_type_ == 'binary':
         #     self.support_vectors_ = X[:nl, :][self.support_]
         #     self.n_support_ = self.support_vectors_.shape[0]
         # else:
         #     self.support_vectors_ = []
         #     self.n_support_ = []
-        #     for i in range(y_.shape[1]):
+        #     for i in range(y_transformed.shape[1]):
         #         self.support_vectors_.append(X[:nl, :][self.support_[i]][-1])
         #         self.n_support_.append(self.support_vectors_[-1].shape[0])
 
@@ -199,14 +201,10 @@ class ARRLS(BaseFramework):
         kwargs: 
             kernel param
         """
-        super().__init__(kernel, **kwargs)
+        super().__init__(kernel, k_neighbour, manifold_metric, knn_mode, **kwargs)
         self.lambda_ = lambda_
         self.gamma_ = gamma_
         self.sigma_ = sigma_
-        self.k_neighbour = k_neighbour
-        # self.coef_ = None
-        self.knn_mode = knn_mode
-        self.manifold_metric = manifold_metric
 
     def fit(self, xs, ys, xt=None, yt=None):
         """Fit the model according to the given training data.
@@ -223,22 +221,21 @@ class ARRLS(BaseFramework):
         yt : array-like, optional
             Target label, shape (ntl_samples, ), by default None
         """
-        x, y, ker_x, M, unit_mat = _init_artl(xs, ys, xt, yt, metric=self.kernel, filter_params=True, **self.kwargs)
-        n = ker_x.shape[0]
-        nl = y.shape[0]
+        x, y, krnl_x, M, unit_mat = _init_artl(xs, ys, xt, yt, metric=self.kernel, filter_params=True, **self.kwargs)
+        n = krnl_x.shape[0]
+        n_labeled = y.shape[0]
         J = np.zeros((n, n))
-        J[:nl, :nl] = np.eye(nl)
+        J[:n_labeled, :n_labeled] = np.eye(n_labeled)
 
+        Q = self.sigma_ * unit_mat
         if self.gamma_ != 0:
-            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour,
-                               metric=self.manifold_metric, mode=self.knn_mode)
-            Q_ = np.dot((J + self.lambda_ * M + self.gamma_ * lap_mat),
-                        ker_x) + self.sigma_ * unit_mat
+            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour, metric=self.manifold_metric, mode=self.knn_mode)
+            Q += np.dot((J + self.lambda_ * M + self.gamma_ * lap_mat), krnl_x)
         else:
-            Q_ = np.dot((J + self.lambda_ * M), ker_x) + self.sigma_ * unit_mat
+            Q += np.dot((J + self.lambda_ * M), krnl_x)
 
-        y_ = self._lb.fit_transform(y)
-        self.coef_ = self._solve_semi_ls(Q_, y_)
+        y_transformed = self._lb.fit_transform(y)
+        self.coef_ = self._solve_semi_ls(Q, y_transformed)
 
         self.x = x
 

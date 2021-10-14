@@ -24,7 +24,8 @@ class SIDeRSVM(BaseFramework):
         Parameters
         ----------
         C : float, optional
-            param for importance of slack variable, by default 1
+            Regularization parameter. The strength of the regularization is inversely proportional to C. Must be
+            strictly positive. The penalty is a squared l2 penalty., by default 1
         kernel : str, optional
             'rbf' | 'linear' | 'poly', by default 'linear'
         lambda_ : float, optional
@@ -46,18 +47,13 @@ class SIDeRSVM(BaseFramework):
         solver : str, optional
             quadratic programming solver, [cvxopt, osqp], by default 'osqp'
         """
-        super().__init__(kernel, **kwargs)
+        super().__init__(kernel, k_neighbour, manifold_metric, knn_mode, **kwargs)
         self.lambda_ = lambda_
         self.mu = mu
         self.C = C
         self.solver = solver
-        # self.scaler = StandardScaler()
-        # self.support_ = None
         # self.support_vectors_ = None
-        # self.n_support_ = None
-        self.manifold_metric = manifold_metric
-        self.k_neighbour = k_neighbour
-        self.knn_mode = knn_mode
+        self.support_ = None
 
     def fit(self, x, y, covariates=None):
         """Fit the model according to the given training data.
@@ -67,7 +63,7 @@ class SIDeRSVM(BaseFramework):
         x : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
-            Label,, shape (nl_samples, ) where nl_samples <= n_samples
+            Label,, shape (n_labeled_samples, ) where n_labeled_samples <= n_samples
         covariates : array-like,
             Domain co-variate matrix for input data, shape (n_samples, n_co-variates)
 
@@ -78,22 +74,20 @@ class SIDeRSVM(BaseFramework):
         """
         krnl_x, unit_mat, ctr_mat, n = base_init(x, kernel=self.kernel, **self.kwargs)
         krnl_c = np.dot(covariates, covariates.T)
-        y_ = self._lb.fit_transform(y)
+        y_transformed = self._lb.fit_transform(y)
 
-        Q_ = unit_mat.copy()
+        Q = unit_mat.copy()
         if self.mu != 0:
-            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour,
-                               metric=self.manifold_metric, mode=self.knn_mode)
-            Q_ += np.dot(self.lambda_ / np.square(n - 1) *
-                         multi_dot([ctr_mat, krnl_c, ctr_mat])
-                         + self.mu / np.square(n) * lap_mat, krnl_x)
+            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour, metric=self.manifold_metric, mode=self.knn_mode)
+            Q += np.dot(self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat]) / np.square(n - 1)
+                        + self.mu * lap_mat / np.square(n), krnl_x)
         else:
-            Q_ += self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat, krnl_x]) / np.square(n - 1)
+            Q += self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat, krnl_x]) / np.square(n - 1)
 
-        self.coef_, self.support_ = self._solve_semi_dual(krnl_x, y_, Q_, self.C, self.solver)
+        self.coef_, self.support_ = self._solve_semi_dual(krnl_x, y_transformed, Q, self.C, self.solver)
 
         # if self._lb.y_type_ == 'binary':
-        #     self.coef_, self.support_ = self._semi_binary_dual(K, y_, Q_,
+        #     self.coef_, self.support_ = self._semi_binary_dual(K, y_transformed, Q,
         #                                                        self.C,
         #                                                        self.solver)
         #     self.support_vectors_ = X[:nl, :][self.support_]
@@ -104,8 +98,8 @@ class SIDeRSVM(BaseFramework):
         #     self.support_ = []
         #     self.support_vectors_ = []
         #     self.n_support_ = []
-        #     for i in range(y_.shape[1]):
-        #         coef_, support_ = self._semi_binary_dual(K, y_[:, i], Q_,
+        #     for i in range(y_transformed.shape[1]):
+        #         coef_, support_ = self._semi_binary_dual(K, y_transformed[:, i], Q,
         #                                                  self.C,
         #                                                  self.solver)
         #         coef_list.append(coef_.reshape(-1, 1))
@@ -126,7 +120,7 @@ class SIDeRSVM(BaseFramework):
         x : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
-            Label,, shape (nl_samples, ) where nl_samples <= n_samples
+            Label, shape (n_labeled_samples, ) where n_labeled_samples <= n_samples
         covariates : array-like,
             Domain co-variate matrix for input data, shape (n_samples, n_co-variates)
 
@@ -140,9 +134,8 @@ class SIDeRSVM(BaseFramework):
 
 
 class SIDeRLS(BaseFramework):
-    def __init__(self, sigma_=1.0, lambda_=1.0, mu=0.0, kernel='linear', 
-                 k=3, knn_mode='distance', manifold_metric='cosine', 
-                 class_weight=None, **kwargs):
+    def __init__(self, sigma_=1.0, lambda_=1.0, mu=0.0, kernel='linear', k_neighbour=3, knn_mode='distance',
+                 manifold_metric='cosine', class_weight=None, **kwargs):
         """Side Information Dependence Regularised Least Square
 
         Parameters
@@ -155,30 +148,25 @@ class SIDeRLS(BaseFramework):
             param for manifold regularisation, by default 0.0
         kernel : str, optional
             [description], by default 'linear'
-        k : int, optional
+        k_neighbour : int, optional
             number of nearest numbers for each sample in manifold regularisation, 
             by default 3
         knn_mode : str, optional
-            {‘connectivity’, ‘distance’}, by default 'distance'. Type of 
-            returned matrix: ‘connectivity’ will return the connectivity 
-            matrix with ones and zeros, and ‘distance’ will return the 
-            distances between neighbors according to the given metric.
+            {‘connectivity’, ‘distance’}, by default 'distance'. Type of returned matrix: ‘connectivity’ will return
+            the connectivity matrix with ones and zeros, and ‘distance’ will return the distances between neighbors
+            according to the given metric.
         manifold_metric : str, optional
-            The distance metric used to calculate the k-Neighbors for each 
-            sample point. The DistanceMetric class gives a list of available 
-            metrics. By default 'cosine'.
+            The distance metric used to calculate the k-Neighbors for each sample point. The DistanceMetric class
+            gives a list of available metrics. By default 'cosine'.
         class_weight : [type], optional
             [description], by default None
         **kwargs: 
             kernel param
         """
-        super().__init__(kernel, **kwargs)
+        super().__init__(kernel, k_neighbour, manifold_metric, knn_mode, **kwargs)
         self.sigma_ = sigma_
         self.lambda_ = lambda_
         self.mu = mu
-        self.manifold_metric = manifold_metric
-        self.k = k
-        self.knn_mode = knn_mode
         self.class_weight = class_weight
         
     def fit(self, x, y, covariates=None):
@@ -198,37 +186,33 @@ class SIDeRLS(BaseFramework):
         self
             [description]
         """
-        # X, D = cat_data(Xl, Dl, Xu, Du)
-        nl = y.shape[0]
-        ker_x, unit_mat, ctr_mat, n = base_init(x, kernel=self.kernel, **self.kwargs)
+        n_labeled = y.shape[0]
+        krnl_x, unit_mat, ctr_mat, n = base_init(x, kernel=self.kernel, **self.kwargs)
         if type(covariates) == np.ndarray:
-            ker_c = np.dot(covariates, covariates.T)
+            krnl_c = np.dot(covariates, covariates.T)
         else:
-            ker_c = np.zeros((n, n))
+            krnl_c = np.zeros((n, n))
 
         J = np.zeros((n, n))
-        J[:nl, :nl] = np.eye(nl)
+        J[:n_labeled, :n_labeled] = np.eye(n_labeled)
 
+        Q = self.sigma_ * unit_mat
         if self.mu != 0:
-            lap_mat = lap_norm(x, n_neighbour=self.k, mode=self.knn_mode,
-                               metric=self.manifold_metric)
-            Q_ = self.sigma_ * unit_mat + np.dot(J + self.lambda_ / np.square(n - 1)
-                                                 * multi_dot([ctr_mat, ker_c, ctr_mat])
-                                                 + self.mu / np.square(n) * lap_mat, ker_x)
+            lap_mat = lap_norm(x, n_neighbour=self.k, metric=self.manifold_metric, mode=self.knn_mode)
+            Q += np.dot(J + self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat]) / np.square(n - 1)
+                        + self.mu * lap_mat / np.square(n), krnl_x)
         else:
-            Q_ = self.sigma_ * unit_mat + np.dot(J + self.lambda_ / np.square(n - 1)
-                                                 * multi_dot([ctr_mat, ker_c, ctr_mat]), ker_x)
+            Q += np.dot(J + self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat]) / np.square(n - 1), krnl_x)
 
-        y_ = self._lb.fit_transform(y)
-        self.coef_ = self._solve_semi_ls(Q_, y_)
+        y_transformed = self._lb.fit_transform(y)
+        self.coef_ = self._solve_semi_ls(Q, y_transformed)
 
         self.x = x
 
         return self
 
     def fit_predict(self, x, y, covariates=None):
-        """Fit the model according to the given training data and then perform
-            classification on samples in X.
+        """Fit the model according to the given training data and then perform classification on samples in X.
 
         Parameters
         ----------

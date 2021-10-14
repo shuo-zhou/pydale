@@ -13,25 +13,28 @@ import osqp
 class BaseFramework(BaseEstimator, ClassifierMixin):
     """Semi-supervised Learning Framework
     """
-    def __init__(self, kernel, **kwargs) -> None:
+    def __init__(self, kernel, k_neighbour=5, manifold_metric='cosine', knn_mode='distance',  **kwargs) -> None:
         super().__init__()
         self.kernel = kernel
+        self.k_neighbour = k_neighbour
+        self.manifold_metric = manifold_metric
+        self.knn_mode = knn_mode
         self.coef_ = None
         self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
         self.kwargs = kwargs
         self.x = None
 
     @classmethod
-    def _solve_semi_dual(cls, K, y, Q_, C, solver='osqp'):
+    def _solve_semi_dual(cls, krnl_x, y, Q, C, solver='osqp'):
         """[summary]
 
         Parameters
         ----------
-        K : [type]
+        krnl_x : [type]
             [description]
         y : [type]
             [description]
-        Q_ : [type]
+        Q : [type]
             [description]
         C : [type]
             [description]
@@ -44,31 +47,29 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
             [description]
         """
         if len(y.shape) == 1:
-            coef_, support_ = cls._semi_binary_dual(K, y, Q_, C, solver)
+            coef_, support_ = cls._semi_binary_dual(krnl_x, y, Q, C, solver)
             support_ = [support_]
         else:
-            coef_ = []
+            coef_ = np.zeros((krnl_x.shape[1], y.shape[1]))
             support_ = []
             for i in range(y.shape[1]):
-                coef_i, support_i = cls._semi_binary_dual(K, y[:, i], Q_, C, solver)
-                coef_.append(coef_i.reshape(-1, 1))
+                coef_i, support_i = cls._semi_binary_dual(krnl_x, y[:, i], Q, C, solver)
+                coef_[:, i] = coef_i
                 support_.append(support_i)
-
-            coef_ = np.concatenate(coef_, axis=1)
 
         return coef_, support_
 
     @classmethod
-    def _semi_binary_dual(cls, K, y_, Q_, C, solver='osqp'):
+    def _semi_binary_dual(cls, K, y, Q, C, solver='osqp'):
         """solve min_x x^TPx + q^Tx, s.t. Gx<=h, Ax=b
 
         Parameters
         ----------
         K : [type]
             [description]
-        y_ : [type]
+        y : [type]
             [description]
-        Q_ : [type]
+        Q : [type]
             [description]
         C : [type]
             [description]
@@ -80,52 +81,53 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
         [type]
             [description]
         """
-        nl = y_.shape[0]
+        n_labeled = y.shape[0]
         n = K.shape[0]
-        J = np.zeros((nl, n))
-        J[:nl, :nl] = np.eye(nl)
-        Q_inv = inv(Q_)
-        Y = np.diag(y_.reshape(-1))
-        Q = multi_dot([Y, J, K, Q_inv, J.T, Y])
-        Q = Q.astype('float32')
-        alpha = cls._quadprog(Q, y_, C, solver)
-        coef_ = multi_dot([Q_inv, J.T, Y, alpha])
+        J = np.zeros((n_labeled, n))
+        J[:n_labeled, :n_labeled] = np.eye(n_labeled)
+        Q_inv = inv(Q)
+        y_mat = np.diag(y.reshape(-1))
+        P = multi_dot([y_mat, J, K, Q_inv, J.T, y_mat])
+        P = P.astype('float32')
+        alpha = cls._quadprog(P, y, C, solver)
+        coef_ = multi_dot([Q_inv, J.T, y_mat, alpha])
         support_ = np.where((alpha > 0) & (alpha < C))
         return coef_, support_
 
     @classmethod
-    def _quadprog(cls, Q, y, C, solver='osqp'):
+    def _quadprog(cls, P, y, C, solver='osqp'):
         """solve min_x x^TPx + q^Tx, s.t. Gx<=h, Ax=b
 
         Parameters
         ----------
-        Q : [type]
+        P : [type]
             [description]
         y : [type]
             [description]
-        C : [type]
-            [description]
+        C : [float]
+            Regularization parameter. The strength of the regularization is inversely proportional to C. Must be
+            strictly positive. The penalty is a squared l2 penalty.
         solver : str, optional
-            [description], by default 'osqp'
+            quadprog solver name, by default 'osqp'
 
         Returns
         -------
-        [type]
-            [description]
+        array-like
+            coefficients alpha
         """
         # dual
-        nl = y.shape[0]
-        q = -1 * np.ones((nl, 1))
+        n_labeled = y.shape[0]
+        q = -1 * np.ones((n_labeled, 1))
 
         if solver == 'cvxopt':
-            G = np.zeros((2 * nl, nl))
-            G[:nl, :] = -1 * np.eye(nl)
-            G[nl:, :] = np.eye(nl)
-            h = np.zeros((2 * nl, 1))
-            h[nl:, :] = C / nl
+            G = np.zeros((2 * n_labeled, n_labeled))
+            G[:n_labeled, :] = -1 * np.eye(n_labeled)
+            G[n_labeled:, :] = np.eye(n_labeled)
+            h = np.zeros((2 * n_labeled, 1))
+            h[n_labeled:, :] = C / n_labeled
 
             # convert numpy matrix to cvxopt matrix
-            P = matrix(Q)
+            P = matrix(P)
             q = matrix(q)
             G = matrix(G)
             h = matrix(h)
@@ -135,16 +137,16 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
             solvers.options['show_progress'] = False
             sol = solvers.qp(P, q, G, h, A, b)
 
-            alpha = np.array(sol['x']).reshape(nl)
+            alpha = np.array(sol['x']).reshape(n_labeled)
 
         elif solver == 'osqp':
             warnings.simplefilter('ignore', sparse.SparseEfficiencyWarning)
-            P = sparse.csc_matrix((nl, nl))
-            P[:nl, :nl] = Q[:nl, :nl]
-            G = sparse.vstack([sparse.eye(nl), y.reshape(1, -1)]).tocsc()
-            l_ = np.zeros((nl + 1, 1))
+            P = sparse.csc_matrix((n_labeled, n_labeled))
+            P[:n_labeled, :n_labeled] = P[:n_labeled, :n_labeled]
+            G = sparse.vstack([sparse.eye(n_labeled), y.reshape(1, -1)]).tocsc()
+            l_ = np.zeros((n_labeled + 1, 1))
             u = np.zeros(l_.shape)
-            u[:nl, 0] = C
+            u[:n_labeled, 0] = C
 
             prob = osqp.OSQP()
             prob.setup(P, q, G, l_, u, verbose=False)

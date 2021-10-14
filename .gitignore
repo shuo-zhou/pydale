@@ -9,6 +9,9 @@
 *.xml
 
 TPy_/
+tests/test_data
+tests/estimator/tests
+tests/transformer/tests
 
 # Jupyter Notebook Checkpoints
 *-checkpoint.ipynb
