@@ -8,7 +8,12 @@
 *.zip
 *.xml
 
+.ipynb_checkpoints/
+build/
+data/
+dist/
 TPy_/
+TPy.egg-info/
 tests/test_data
 tests/estimator/tests
 tests/transformer/tests
