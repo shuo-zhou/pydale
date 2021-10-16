@@ -25,7 +25,7 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
         self.x = None
 
     @classmethod
-    def _solve_semi_dual(cls, krnl_x, y, Q, C, solver='osqp'):
+    def _solve_semi_dual(cls, krnl_x, y, obj_core, C, solver='osqp'):
         """[summary]
 
         Parameters
@@ -34,10 +34,11 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
             [description]
         y : [type]
             [description]
-        Q : [type]
-            [description]
-        C : [type]
-            [description]
+        obj_core : [array-like]
+            Core matrix of objective
+        C : [float]
+            Regularization parameter. The strength of the regularization is inversely proportional to C. Must be
+            strictly positive. The penalty is a squared l2 penalty.
         solver : str, optional
             [description], by default 'osqp'
 
@@ -47,32 +48,33 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
             [description]
         """
         if len(y.shape) == 1:
-            coef_, support_ = cls._semi_binary_dual(krnl_x, y, Q, C, solver)
+            coef_, support_ = cls._semi_binary_dual(krnl_x, y, obj_core, C, solver)
             support_ = [support_]
         else:
             coef_ = np.zeros((krnl_x.shape[1], y.shape[1]))
             support_ = []
             for i in range(y.shape[1]):
-                coef_i, support_i = cls._semi_binary_dual(krnl_x, y[:, i], Q, C, solver)
+                coef_i, support_i = cls._semi_binary_dual(krnl_x, y[:, i], obj_core, C, solver)
                 coef_[:, i] = coef_i
                 support_.append(support_i)
 
         return coef_, support_
 
     @classmethod
-    def _semi_binary_dual(cls, K, y, Q, C, solver='osqp'):
+    def _semi_binary_dual(cls, krnl_x, y, obj_core, C, solver='osqp'):
         """solve min_x x^TPx + q^Tx, s.t. Gx<=h, Ax=b
 
         Parameters
         ----------
-        K : [type]
+        krnl_x : [type]
             [description]
         y : [type]
             [description]
-        Q : [type]
+        obj_core : [type]
             [description]
-        C : [type]
-            [description]
+        C : [float]
+            Regularization parameter. The strength of the regularization is inversely proportional to C. Must be
+            strictly positive. The penalty is a squared l2 penalty.
         solver : str, optional
             [description], by default 'osqp'
 
@@ -82,15 +84,15 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
             [description]
         """
         n_labeled = y.shape[0]
-        n = K.shape[0]
+        n = krnl_x.shape[0]
         J = np.zeros((n_labeled, n))
         J[:n_labeled, :n_labeled] = np.eye(n_labeled)
-        Q_inv = inv(Q)
-        y_mat = np.diag(y.reshape(-1))
-        P = multi_dot([y_mat, J, K, Q_inv, J.T, y_mat])
-        P = P.astype('float32')
-        alpha = cls._quadprog(P, y, C, solver)
-        coef_ = multi_dot([Q_inv, J.T, y_mat, alpha])
+        obj_inv = inv(obj_core)
+        y_diag = np.diag(y.reshape(-1))
+        Q = multi_dot([y_diag, J, krnl_x, obj_inv, J.T, y_diag])
+        Q = Q.astype('float32')
+        alpha = cls._quadprog(Q, y, C, solver)
+        coef_ = multi_dot([obj_inv, J.T, y_diag, alpha])
         support_ = np.where((alpha > 0) & (alpha < C))
         return coef_, support_
 
@@ -113,7 +115,7 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
         Returns
         -------
         array-like
-            coefficients alpha
+            coefficients beta
         """
         # dual
         n_labeled = y.shape[0]
@@ -127,7 +129,7 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
             h[n_labeled:, :] = C / n_labeled
 
             # convert numpy matrix to cvxopt matrix
-            P = matrix(P)
+            P = matrix(P.astype(np.float))
             q = matrix(q)
             G = matrix(G)
             h = matrix(h)
@@ -137,26 +139,26 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
             solvers.options['show_progress'] = False
             sol = solvers.qp(P, q, G, h, A, b)
 
-            alpha = np.array(sol['x']).reshape(n_labeled)
+            beta = np.array(sol['x']).reshape(n_labeled)
 
         elif solver == 'osqp':
             warnings.simplefilter('ignore', sparse.SparseEfficiencyWarning)
-            P_ = sparse.csc_matrix((n_labeled, n_labeled))
-            P_[:n_labeled, :n_labeled] = P[:n_labeled, :n_labeled]
+            P_sparse = sparse.csc_matrix((n_labeled, n_labeled))
+            P_sparse[:n_labeled, :n_labeled] = P[:n_labeled, :n_labeled]
             G = sparse.vstack([sparse.eye(n_labeled), y.reshape(1, -1)]).tocsc()
             l_ = np.zeros((n_labeled + 1, 1))
             u = np.zeros(l_.shape)
             u[:n_labeled, 0] = C / n_labeled
 
             prob = osqp.OSQP()
-            prob.setup(P_, q, G, l_, u, verbose=False)
+            prob.setup(P_sparse, q, G, l_, u, verbose=False)
             res = prob.solve()
-            alpha = res.x
+            beta = res.x
 
         else:
             raise ValueError('Invalid QP solver')
 
-        return alpha
+        return beta
 
     @classmethod
     def _solve_semi_ls(cls, Q, y):

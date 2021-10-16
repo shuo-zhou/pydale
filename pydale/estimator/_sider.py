@@ -25,7 +25,7 @@ class SIDeRSVM(BaseFramework):
         ----------
         C : float, optional
             Regularization parameter. The strength of the regularization is inversely proportional to C. Must be
-            strictly positive. The penalty is a squared l2 penalty., by default 1
+            strictly positive. The penalty is a squared l2 penalty, by default 1
         kernel : str, optional
             'rbf' | 'linear' | 'poly', by default 'linear'
         lambda_ : float, optional
@@ -76,18 +76,18 @@ class SIDeRSVM(BaseFramework):
         krnl_c = np.dot(covariates, covariates.T)
         y_transformed = self._lb.fit_transform(y)
 
-        Q = unit_mat.copy()
+        obj_core = unit_mat.copy()  # core objective
         if self.mu != 0:
             lap_mat = lap_norm(x, n_neighbour=self.k_neighbour, metric=self.manifold_metric, mode=self.knn_mode)
-            Q += np.dot(self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat]) / np.square(n - 1)
-                        + self.mu * lap_mat / np.square(n), krnl_x)
+            obj_core += np.dot(self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat]) / np.square(n - 1)
+                               + self.mu * lap_mat / np.square(n), krnl_x)
         else:
-            Q += self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat, krnl_x]) / np.square(n - 1)
+            obj_core += self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat, krnl_x]) / np.square(n - 1)
 
-        self.coef_, self.support_ = self._solve_semi_dual(krnl_x, y_transformed, Q, self.C, self.solver)
+        self.coef_, self.support_ = self._solve_semi_dual(krnl_x, y_transformed, obj_core, self.C, self.solver)
 
         # if self._lb.y_type_ == 'binary':
-        #     self.coef_, self.support_ = self._semi_binary_dual(K, y_transformed, Q,
+        #     self.coef_, self.support_ = self._semi_binary_dual(K, y_transformed, obj_core,
         #                                                        self.C,
         #                                                        self.solver)
         #     self.support_vectors_ = X[:nl, :][self.support_]
@@ -99,7 +99,7 @@ class SIDeRSVM(BaseFramework):
         #     self.support_vectors_ = []
         #     self.n_support_ = []
         #     for i in range(y_transformed.shape[1]):
-        #         coef_, support_ = self._semi_binary_dual(K, y_transformed[:, i], Q,
+        #         coef_, support_ = self._semi_binary_dual(K, y_transformed[:, i], obj_core,
         #                                                  self.C,
         #                                                  self.solver)
         #         coef_list.append(coef_.reshape(-1, 1))
