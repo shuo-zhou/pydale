@@ -12,6 +12,8 @@
 build/
 data/
 dist/
+
+pydale/ten_alg/
 TPy_/
 TPy.egg-info/
 tests/test_data

@@ -141,15 +141,15 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
 
         elif solver == 'osqp':
             warnings.simplefilter('ignore', sparse.SparseEfficiencyWarning)
-            P = sparse.csc_matrix((n_labeled, n_labeled))
-            P[:n_labeled, :n_labeled] = P[:n_labeled, :n_labeled]
+            P_ = sparse.csc_matrix((n_labeled, n_labeled))
+            P_[:n_labeled, :n_labeled] = P[:n_labeled, :n_labeled]
             G = sparse.vstack([sparse.eye(n_labeled), y.reshape(1, -1)]).tocsc()
             l_ = np.zeros((n_labeled + 1, 1))
             u = np.zeros(l_.shape)
-            u[:n_labeled, 0] = C
+            u[:n_labeled, 0] = C / n_labeled
 
             prob = osqp.OSQP()
-            prob.setup(P, q, G, l_, u, verbose=False)
+            prob.setup(P_, q, G, l_, u, verbose=False)
             res = prob.solve()
             alpha = res.x
 
