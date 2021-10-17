@@ -2,11 +2,8 @@
 # author: Shuo Zhou, The University of Sheffield
 # =============================================================================
 import numpy as np
-from scipy.linalg import eig
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.metrics.pairwise import pairwise_kernels
-from sklearn.preprocessing import KernelCenterer
 from ..utils import mmd_coef, base_init
+from .base import BaseTransformer
 # from sklearn.preprocessing import StandardScaler
 # =============================================================================
 # Implementation of three transfer learning methods:
@@ -26,7 +23,7 @@ from ..utils import mmd_coef, base_init
 # =============================================================================
 
 
-class JDA(BaseEstimator, TransformerMixin):
+class JDA(BaseTransformer):
     def __init__(self, n_components, kernel='linear', lambda_=1.0, mu=1.0, **kwargs):
         """
         Parameters
@@ -34,15 +31,12 @@ class JDA(BaseEstimator, TransformerMixin):
             kernel_type: [‘rbf’, ‘sigmoid’, ‘polynomial’, ‘poly’, ‘linear’,
             ‘cosine’] (default is 'linear')
             **kwargs: kernel param
-            lambda_: regulisation param
+            lambda_: regularisation param
             mu: >= 0, param for conditional mmd, (mu=0 for TCA, mu=1 for JDA, BDA otherwise)
         """
-        self.n_components = n_components
-        self.kwargs = kwargs
-        self.kernel = kernel
+        super().__init__(n_components, kernel, **kwargs)
         self.lambda_ = lambda_
         self.mu = mu
-        self._centerer = KernelCenterer()
 
     def fit(self, xs, ys=None, xt=None, yt=None):
         """
@@ -59,7 +53,7 @@ class JDA(BaseEstimator, TransformerMixin):
             Target domain labels, shape (nt_samples,), by default None.
         """
         if type(xt) == np.ndarray:
-            X = np.vstack((xs, xt))
+            x = np.vstack((xs, xt))
             ns = xs.shape[0]
             nt = xt.shape[0]
 
@@ -68,49 +62,30 @@ class JDA(BaseEstimator, TransformerMixin):
             else:
                 L = mmd_coef(ns, nt, kind='marginal', mu=0)
         else:
-            X = xs
-            L = np.zeros((X.shape[0], X.shape[0]))
+            x = xs.copy()
+            L = np.zeros((x.shape[0], x.shape[0]))
 
-        krnl_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
+        krnl_x, unit_mat, ctr_mat, n = base_init(x, kernel=self.kernel, **self.kwargs)
         krnl_x = self._centerer.fit_transform(krnl_x)
         # objective for optimization
         obj = np.dot(np.dot(krnl_x, L), krnl_x.T) + self.lambda_ * unit_mat
         # constraint subject to
         st = np.dot(np.dot(krnl_x, ctr_mat), krnl_x.T)
-        eig_values, eig_vectors = eig(obj, st)
-        
-        ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
-#        idx_sorted = np.argsort(ev_abs)[:self.n_components]
-        idx_sorted = np.argsort(ev_abs)
-        
-        U = np.zeros(eig_vectors.shape)
-        U[:, :] = eig_vectors[:, idx_sorted]
-        self.U = np.asarray(U, dtype=np.float)
-        self.xs = xs
-        self.xt = xt
+#         eig_values, eig_vectors = eig(obj, st)
+#
+#         ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
+# #        idx_sorted = np.argsort(ev_abs)[:self.n_components]
+#         idx_sorted = np.argsort(ev_abs)
+#
+#         U = np.zeros(eig_vectors.shape)
+#         U[:, :] = eig_vectors[:, idx_sorted]
+#         self.U = np.asarray(U, dtype=np.float)
+#         self.xs = xs
+#         self.xt = xt
+        self._fit(obj_min=obj, obj_max=st)
 
         return self
-    
-    def transform(self, x):
-        """
-        Parameters
-        ----------
-        x : array-like,
-            shape (n_samples, n_features)
 
-        Returns
-        -------
-        array-like
-            transformed data
-        """
-        # X = self.scaler.transform(X)
-        # check_is_fitted(self, 'Xs')
-        # check_is_fitted(self, 'Xt')
-        x_fit = np.vstack((self.xs, self.xt))
-        ker_x = pairwise_kernels(x, x_fit, metric=self.kernel, filter_params=True, **self.kwargs)
-
-        return np.dot(ker_x, self.U[:, :self.n_components])
-    
     def fit_transform(self, xs, ys=None, xt=None, yt=None):
         """
         Parameters
