@@ -7,7 +7,7 @@ from sklearn.utils.validation import check_is_fitted
 
 
 class BaseTransformer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_components, kernel='linear', **kwargs) -> None:
+    def __init__(self, n_components, kernel="linear", **kwargs) -> None:
         super().__init__()
         self.n_components = n_components
         self.kernel = kernel
@@ -54,10 +54,11 @@ class BaseTransformer(BaseEstimator, TransformerMixin):
         array-like
             transformed data
         """
-        check_is_fitted(self, 'x_fit')
+        check_is_fitted(self, "x_fit")
         if type(aug_features) == np.ndarray:
             x = np.concatenate((x, aug_features), axis=1)
-        krnl_x = self._centerer.transform(pairwise_kernels(x, self.x_fit, metric=self.kernel, filter_params=True,
-                                                           **self.kwargs))
+        krnl_x = self._centerer.transform(
+            pairwise_kernels(x, self.x_fit, metric=self.kernel, filter_params=True, **self.kwargs)
+        )
 
-        return np.dot(krnl_x, self.U[:, :self.n_components])
+        return np.dot(krnl_x, self.U[:, : self.n_components])

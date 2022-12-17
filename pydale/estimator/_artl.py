@@ -4,12 +4,14 @@
 import numpy as np
 from numpy.linalg import multi_dot
 from sklearn.metrics.pairwise import pairwise_kernels
+
 from ..utils import lap_norm, mmd_coef
 from .base import BaseFramework
+
 # =============================================================================
 # Adaptation Regularisation Transfer Learning: ARTL
-# Ref: Long, M., Wang, J., Ding, G., Pan, S.J. and Philip, S.Y., 2013. 
-# Adaptation regularization: A general framework for transfer learning. 
+# Ref: Long, M., Wang, J., Ding, G., Pan, S.J. and Philip, S.Y., 2013.
+# Adaptation regularization: A general framework for transfer learning.
 # IEEE Transactions on Knowledge and Data Engineering, 26(5), pp.1076-1089.
 # =============================================================================
 
@@ -47,7 +49,7 @@ def _init_artl(xs, ys, xt=None, yt=None, **kwargs):
         x = np.concatenate([xs, xt], axis=0)
         ns = xs.shape[0]
         nt = xt.shape[0]
-        M = mmd_coef(ns, nt, ys, yt, kind='joint')
+        M = mmd_coef(ns, nt, ys, yt, kind="joint")
     else:
         x = xs.copy()
         M = np.zeros((x.shape[0], x.shape[0]))
@@ -65,8 +67,18 @@ def _init_artl(xs, ys, xt=None, yt=None, **kwargs):
 
 
 class ARSVM(BaseFramework):
-    def __init__(self, C=1.0, kernel='linear', lambda_=1.0, gamma_=0.0, k_neighbour=5, manifold_metric='cosine',
-                 knn_mode='distance', solver='osqp', **kwargs):
+    def __init__(
+        self,
+        C=1.0,
+        kernel="linear",
+        lambda_=1.0,
+        gamma_=0.0,
+        k_neighbour=5,
+        manifold_metric="cosine",
+        knn_mode="distance",
+        solver="osqp",
+        **kwargs,
+    ):
         """Adaptation Regularised Support Vector Machine
 
         Parameters
@@ -80,18 +92,18 @@ class ARSVM(BaseFramework):
         gamma_ : float, optional
             manifold regulisation param, by default 0.0
         k_neighbour : int, optional
-            number of nearest numbers for each sample in manifold regularisation, 
+            number of nearest numbers for each sample in manifold regularisation,
             by default 5
         solver : str, optional
             solver to solve quadprog, osqp or cvxopt, by default 'osqp'
         manifold_metric : str, optional
-            The distance metric used to calculate the k-Neighbors for each 
-            sample point. The DistanceMetric class gives a list of available 
+            The distance metric used to calculate the k-Neighbors for each
+            sample point. The DistanceMetric class gives a list of available
             metrics. By default 'cosine'.
         knn_mode : str, optional
-            {‘connectivity’, ‘distance’}, by default 'distance'. Type of 
-            returned matrix: ‘connectivity’ will return the connectivity 
-            matrix with ones and zeros, and ‘distance’ will return the 
+            {‘connectivity’, ‘distance’}, by default 'distance'. Type of
+            returned matrix: ‘connectivity’ will return the connectivity
+            matrix with ones and zeros, and ‘distance’ will return the
             distances between neighbors according to the given metric.
         kwargs :
             kernel param
@@ -152,7 +164,7 @@ class ARSVM(BaseFramework):
     def fit_predict(self, xs, ys, xt=None, yt=None):
         """Fit the model according to the given training data and then perform
             classification on samples in Xt.
-        
+
         Parameters
         ----------
         xs : array-like
@@ -171,9 +183,17 @@ class ARSVM(BaseFramework):
 
 
 class ARRLS(BaseFramework):
-    def __init__(self, kernel='linear', lambda_=1.0, gamma_=0.0, sigma_=1.0, 
-                 k_neighbour=5, manifold_metric='cosine', knn_mode='distance', 
-                 **kwargs):
+    def __init__(
+        self,
+        kernel="linear",
+        lambda_=1.0,
+        gamma_=0.0,
+        sigma_=1.0,
+        k_neighbour=5,
+        manifold_metric="cosine",
+        knn_mode="distance",
+        **kwargs,
+    ):
         """Adaptation Regularised Least Square
 
         Parameters
@@ -187,18 +207,18 @@ class ARRLS(BaseFramework):
         sigma_ : float, optional
             l2 regularisation param, by default 1.0
         k_neighbour : int, optional
-            number of nearest numbers for each sample in manifold regularisation, 
+            number of nearest numbers for each sample in manifold regularisation,
             by default 5
         manifold_metric : str, optional
-            The distance metric used to calculate the k-Neighbors for each 
-            sample point. The DistanceMetric class gives a list of available 
+            The distance metric used to calculate the k-Neighbors for each
+            sample point. The DistanceMetric class gives a list of available
             metrics. By default 'cosine'.
         knn_mode : str, optional
-            {‘connectivity’, ‘distance’}, by default 'distance'. Type of 
-            returned matrix: ‘connectivity’ will return the connectivity 
-            matrix with ones and zeros, and ‘distance’ will return the 
+            {‘connectivity’, ‘distance’}, by default 'distance'. Type of
+            returned matrix: ‘connectivity’ will return the connectivity
+            matrix with ones and zeros, and ‘distance’ will return the
             distances between neighbors according to the given metric.
-        kwargs: 
+        kwargs:
             kernel param
         """
         super().__init__(kernel, k_neighbour, manifold_metric, knn_mode, **kwargs)
@@ -208,7 +228,7 @@ class ARRLS(BaseFramework):
 
     def fit(self, xs, ys, xt=None, yt=None):
         """Fit the model according to the given training data.
-        
+
         Parameters
         ----------
         xs : array-like
@@ -229,7 +249,7 @@ class ARRLS(BaseFramework):
 
         Q = self.sigma_ * unit_mat
         if self.gamma_ != 0:
-            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour, metric=self.manifold_metric, mode=self.knn_mode)
+            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour, metric=self.manifold_metric, mode=self.knn_mode,)
             Q += np.dot((J + self.lambda_ * M + self.gamma_ * lap_mat), krnl_x)
         else:
             Q += np.dot((J + self.lambda_ * M), krnl_x)

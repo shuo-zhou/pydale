@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
-import pydale.estimator as estimator
-
 from sklearn.metrics import accuracy_score
+
+import pydale.estimator as estimator
 
 
 def test_svm(office_test_data):

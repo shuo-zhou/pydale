@@ -2,8 +2,10 @@
 # author: Shuo Zhou, The University of Sheffield
 # =============================================================================
 import numpy as np
-from ..utils import mmd_coef, base_init
+
+from ..utils import base_init, mmd_coef
 from .base import BaseTransformer
+
 # from sklearn.preprocessing import StandardScaler
 # =============================================================================
 # Implementation of three transfer learning methods:
@@ -15,7 +17,7 @@ from .base import BaseTransformer
 # Transfer Component Analysis," in IEEE Transactions on Neural Networks,
 # vol. 22, no. 2, pp. 199-210, Feb. 2011.
 # [2] Mingsheng Long, Jianmin Wang, Guiguang Ding, Jiaguang Sun, Philip S. Yu,
-# Transfer Feature Learning with Joint Distribution Adaptation, IEEE 
+# Transfer Feature Learning with Joint Distribution Adaptation, IEEE
 # International Conference on Computer Vision (ICCV), 2013.
 # [3] Wang, J., Chen, Y., Hao, S., Feng, W. and Shen, Z., 2017, November. Balanced
 # distribution adaptation for transfer learning. In Data Mining (ICDM), 2017
@@ -24,7 +26,7 @@ from .base import BaseTransformer
 
 
 class JDA(BaseTransformer):
-    def __init__(self, n_components, kernel='linear', lambda_=1.0, mu=1.0, **kwargs):
+    def __init__(self, n_components, kernel="linear", lambda_=1.0, mu=1.0, **kwargs):
         """
         Parameters
             n_components: n_components after (n_components <= min(d, n))
@@ -58,9 +60,9 @@ class JDA(BaseTransformer):
             nt = xt.shape[0]
 
             if ys is not None and yt is not None:
-                L = mmd_coef(ns, nt, ys, yt, kind='joint', mu=self.mu)
+                L = mmd_coef(ns, nt, ys, yt, kind="joint", mu=self.mu)
             else:
-                L = mmd_coef(ns, nt, kind='marginal', mu=0)
+                L = mmd_coef(ns, nt, kind="marginal", mu=0)
         else:
             x = xs.copy()
             L = np.zeros((x.shape[0], x.shape[0]))
@@ -71,17 +73,17 @@ class JDA(BaseTransformer):
         obj = np.dot(np.dot(krnl_x, L), krnl_x.T) + self.lambda_ * unit_mat
         # constraint subject to
         st = np.dot(np.dot(krnl_x, ctr_mat), krnl_x.T)
-#         eig_values, eig_vectors = eig(obj, st)
-#
-#         ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
-# #        idx_sorted = np.argsort(ev_abs)[:self.n_components]
-#         idx_sorted = np.argsort(ev_abs)
-#
-#         U = np.zeros(eig_vectors.shape)
-#         U[:, :] = eig_vectors[:, idx_sorted]
-#         self.U = np.asarray(U, dtype=np.float)
-#         self.xs = xs
-#         self.xt = xt
+        #         eig_values, eig_vectors = eig(obj, st)
+        #
+        #         ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
+        # #        idx_sorted = np.argsort(ev_abs)[:self.n_components]
+        #         idx_sorted = np.argsort(ev_abs)
+        #
+        #         U = np.zeros(eig_vectors.shape)
+        #         U[:, :] = eig_vectors[:, idx_sorted]
+        #         self.U = np.asarray(U, dtype=np.float)
+        #         self.xs = xs
+        #         self.xt = xt
         self._fit(obj_min=obj, obj_max=st)
 
         return self

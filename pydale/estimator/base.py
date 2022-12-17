@@ -1,19 +1,21 @@
 import warnings
+
 import numpy as np
-from numpy.linalg import multi_dot, inv
+import osqp
 import scipy.sparse as sparse
+from cvxopt import matrix, solvers
+from numpy.linalg import inv, multi_dot
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils.validation import check_is_fitted
-from cvxopt import matrix, solvers
-import osqp
 
 
 class BaseFramework(BaseEstimator, ClassifierMixin):
     """Semi-supervised Learning Framework
     """
-    def __init__(self, kernel, k_neighbour=5, manifold_metric='cosine', knn_mode='distance',  **kwargs) -> None:
+
+    def __init__(self, kernel, k_neighbour=5, manifold_metric="cosine", knn_mode="distance", **kwargs) -> None:
         super().__init__()
         self.kernel = kernel
         self.k_neighbour = k_neighbour
@@ -25,7 +27,7 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
         self.x = None
 
     @classmethod
-    def _solve_semi_dual(cls, krnl_x, y, obj_core, C, solver='osqp'):
+    def _solve_semi_dual(cls, krnl_x, y, obj_core, C, solver="osqp"):
         """[summary]
 
         Parameters
@@ -61,7 +63,7 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
         return coef_, support_
 
     @classmethod
-    def _semi_binary_dual(cls, krnl_x, y, obj_core, C, solver='osqp'):
+    def _semi_binary_dual(cls, krnl_x, y, obj_core, C, solver="osqp"):
         """solve min_x x^TPx + q^Tx, s.t. Gx<=h, Ax=b
 
         Parameters
@@ -90,14 +92,14 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
         obj_inv = inv(obj_core)
         y_diag = np.diag(y.reshape(-1))
         Q = multi_dot([y_diag, J, krnl_x, obj_inv, J.T, y_diag])
-        Q = Q.astype('float32')
+        Q = Q.astype("float32")
         alpha = cls._quadprog(Q, y, C, solver)
         coef_ = multi_dot([obj_inv, J.T, y_diag, alpha])
         support_ = np.where((alpha > 0) & (alpha < C))
         return coef_, support_
 
     @classmethod
-    def _quadprog(cls, P, y, C, solver='osqp'):
+    def _quadprog(cls, P, y, C, solver="osqp"):
         """solve min_x x^TPx + q^Tx, s.t. Gx<=h, Ax=b
 
         Parameters
@@ -121,7 +123,7 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
         n_labeled = y.shape[0]
         q = -1 * np.ones((n_labeled, 1))
 
-        if solver == 'cvxopt':
+        if solver == "cvxopt":
             G = np.zeros((2 * n_labeled, n_labeled))
             G[:n_labeled, :] = -1 * np.eye(n_labeled)
             G[n_labeled:, :] = np.eye(n_labeled)
@@ -133,16 +135,16 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
             q = matrix(q)
             G = matrix(G)
             h = matrix(h)
-            A = matrix(y.reshape(1, -1).astype('float64'))
-            b = matrix(np.zeros(1).astype('float64'))
+            A = matrix(y.reshape(1, -1).astype("float64"))
+            b = matrix(np.zeros(1).astype("float64"))
 
-            solvers.options['show_progress'] = False
+            solvers.options["show_progress"] = False
             sol = solvers.qp(P, q, G, h, A, b)
 
-            beta = np.array(sol['x']).reshape(n_labeled)
+            beta = np.array(sol["x"]).reshape(n_labeled)
 
-        elif solver == 'osqp':
-            warnings.simplefilter('ignore', sparse.SparseEfficiencyWarning)
+        elif solver == "osqp":
+            warnings.simplefilter("ignore", sparse.SparseEfficiencyWarning)
             P_sparse = sparse.csc_matrix((n_labeled, n_labeled))
             P_sparse[:n_labeled, :n_labeled] = P[:n_labeled, :n_labeled]
             G = sparse.vstack([sparse.eye(n_labeled), y.reshape(1, -1)]).tocsc()
@@ -156,7 +158,7 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
             beta = res.x
 
         else:
-            raise ValueError('Invalid QP solver')
+            raise ValueError("Invalid QP solver")
 
         return beta
 
@@ -186,7 +188,7 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
             y_ = np.zeros((n, y.shape[1]))
             y_[:n_labeled, :] = y[:, :]
         return np.dot(Q_inv, y_)
-    
+
     def predict(self, x):
         """Perform classification on samples in x.
 
@@ -194,7 +196,7 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
         ----------
         x : array-like
             Input data, shape (n_samples, n_features)
-            
+
         Returns
         -------
         array-like
@@ -216,13 +218,13 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
         ----------
         x : array-like
             Input data, shape (n_samples, n_features)
-            
+
         Returns
         -------
         array-like
-            decision scores, shape (n_samples,) for binary classification, 
+            decision scores, shape (n_samples,) for binary classification,
             (n_samples, n_class) for multi-class cases
         """
-        check_is_fitted(self, 'x')
+        check_is_fitted(self, "x")
         krnl_x = pairwise_kernels(x, self.x, metric=self.kernel, filter_params=True, **self.kwargs)
-        return np.dot(krnl_x, self.coef_) 
+        return np.dot(krnl_x, self.coef_)

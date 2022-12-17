@@ -1,23 +1,33 @@
 """
 @author: Shuo Zhou, The University of Sheffield, szhou@sheffield.ac.uk
 
-Ref: Belkin, M., Niyogi, P., & Sindhwani, V. (2006). Manifold regularization: 
-A geometric framework for learning from labeled and unlabeled examples. 
+Ref: Belkin, M., Niyogi, P., & Sindhwani, V. (2006). Manifold regularization:
+A geometric framework for learning from labeled and unlabeled examples.
 Journal of machine learning research, 7(Nov), 2399-2434.
 """
 
 import numpy as np
+
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
-from ..utils import lap_norm, base_init
+from ..utils import base_init, lap_norm
 from .base import BaseFramework
 
 
 class LapSVM(BaseFramework):
-    def __init__(self, C=1.0, kernel='linear', gamma_=1.0, solver='osqp', k_neighbour=3, manifold_metric='cosine',
-                 knn_mode='distance', **kwargs):
+    def __init__(
+        self,
+        C=1.0,
+        kernel="linear",
+        gamma_=1.0,
+        solver="osqp",
+        k_neighbour=3,
+        manifold_metric="cosine",
+        knn_mode="distance",
+        **kwargs,
+    ):
         """Laplacian Regularized Support Vector Machine
-        
+
         Parameters
         ----------
         C : float, optional
@@ -37,7 +47,7 @@ class LapSVM(BaseFramework):
             {‘connectivity’, ‘distance’}, by default 'distance'. Type of returned matrix: ‘connectivity’ will return the
             connectivity matrix with ones and zeros, and ‘distance’ will return the distances between neighbors
             according to the given metric.
-        **kwargs: 
+        **kwargs:
             kernel param
         """
         super().__init__(kernel, k_neighbour, manifold_metric, knn_mode, **kwargs)
@@ -55,7 +65,7 @@ class LapSVM(BaseFramework):
             Input data, shape (n_samples, n_features)
         y : array-like
             Label, shape (n_labeled_samples, ) where n_labeled <= n_samples
-            
+
         Returns
         -------
         self
@@ -84,7 +94,7 @@ class LapSVM(BaseFramework):
             Input data, shape (n_samples, n_features)
         y : array-like
             Label, shape (n_labeled_samples, ) where n_labeled <= n_samples
-        
+
         Returns
         -------
         array-like
@@ -95,8 +105,16 @@ class LapSVM(BaseFramework):
 
 
 class LapRLS(BaseFramework):
-    def __init__(self, kernel='linear', gamma_=1.0, sigma_=1.0, k_neighbour=3, manifold_metric='cosine',
-                 knn_mode='distance', **kwargs):
+    def __init__(
+        self,
+        kernel="linear",
+        gamma_=1.0,
+        sigma_=1.0,
+        k_neighbour=3,
+        manifold_metric="cosine",
+        knn_mode="distance",
+        **kwargs,
+    ):
         """Laplacian Regularized Least Squares
 
         Parameters
@@ -132,7 +150,7 @@ class LapRLS(BaseFramework):
             Input data, shape (n_samples, n_features)
         y : array-like
             Label,, shape (n_labeled, ) where n_labeled <= n_samples
-        
+
         Returns
         -------
         self
@@ -146,7 +164,7 @@ class LapRLS(BaseFramework):
 
         Q = self.sigma_ * n_labeled * unit_mat
         if self.gamma_ != 0:
-            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour, metric=self.manifold_metric, mode=self.knn_mode)
+            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour, metric=self.manifold_metric, mode=self.knn_mode,)
             Q += np.dot((J + self.gamma_ * n_labeled * lap_mat / np.square(n)), ker_x)
         else:
             Q += np.dot(J, ker_x)
@@ -168,7 +186,7 @@ class LapRLS(BaseFramework):
             Input data, shape (n_samples, n_features)
         y : array-like
             Label, shape (n_labeled, ) where n_labeled <= n_samples
-        
+
         Returns
         -------
         array-like

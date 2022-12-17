@@ -4,15 +4,17 @@
 
 import numpy as np
 from numpy.linalg import multi_dot
-from .base import BaseTransformer
+
 from ..utils import base_init
+from .base import BaseTransformer
 
 
 class MIDA(BaseTransformer):
-    def __init__(self, n_components, penalty=None, kernel='linear', lambda_=1.0, mu=1.0, eta=1.0, augmentation=True,
-                 **kwargs):
+    def __init__(
+        self, n_components, penalty=None, kernel="linear", lambda_=1.0, mu=1.0, eta=1.0, augmentation=True, **kwargs
+    ):
         """Maximum independence domain adaptation
-        
+
         Parameters
         ----------
         n_components : int
@@ -25,11 +27,11 @@ class MIDA(BaseTransformer):
             regularisation param (if penalty==l2)
         mu: total captured variance param
         eta: label dependence param
-            
+
         References
         ----------
-        Yan, K., Kou, L. and Zhang, D., 2018. Learning domain-invariant subspace 
-        using domain features and independence maximization. IEEE transactions on 
+        Yan, K., Kou, L. and Zhang, D., 2018. Learning domain-invariant subspace
+        using domain features and independence maximization. IEEE transactions on
         cybernetics, 48(1), pp.288-299.
         """
         super().__init__(n_components, kernel, **kwargs)
@@ -67,14 +69,14 @@ class MIDA(BaseTransformer):
             y_mat = self._lb.fit_transform(y)
             ker_y = np.dot(y_mat, y_mat.T)
             obj = multi_dot([krnl_x, ctr_mat, ker_c, ctr_mat, krnl_x.T])
-            st = multi_dot([krnl_x, ctr_mat, (self.mu * unit_mat
-                                              + self.eta * ker_y / np.square(n - 1)),
-                            ctr_mat, krnl_x.T])
+            st = multi_dot(
+                [krnl_x, ctr_mat, (self.mu * unit_mat + self.eta * ker_y / np.square(n - 1)), ctr_mat, krnl_x.T,]
+            )
         # obj = np.trace(np.dot(K,L))
-        else: 
+        else:
             obj = multi_dot([krnl_x, ctr_mat, ker_c, ctr_mat, krnl_x.T]) / np.square(n - 1)
             st = multi_dot([krnl_x, ctr_mat, krnl_x.T])
-            
+
         # if self.penalty == 'l2':
         #     obj -= self.lambda_ * unit_mat
         self._fit(obj_min=obj, obj_max=st)

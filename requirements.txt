@@ -5,5 +5,5 @@ pandas
 pykale
 pytest
 pytorch
-scipy
 scikit-learn
+scipy

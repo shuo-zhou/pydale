@@ -3,14 +3,15 @@
 # =============================================================================
 import numpy as np
 from numpy.linalg import multi_dot
+
+from ..utils import base_init, lap_norm, mmd_coef
 from .base import BaseTransformer
-from ..utils import lap_norm, mmd_coef, base_init
 
 
 class TCA(BaseTransformer):
-    def __init__(self, n_components, kernel='linear', lambda_=1.0, mu=1.0, gamma_=0.5, k_neighbour=3, **kwargs):
+    def __init__(self, n_components, kernel="linear", lambda_=1.0, mu=1.0, gamma_=0.5, k_neighbour=3, **kwargs):
         """Transfer Component Analysis: TCA
-        
+
         Parameters
         ----------
         n_components : int
@@ -32,7 +33,7 @@ class TCA(BaseTransformer):
         IEEE Transactions on Neural Networks, 22(2), 199-210, Feb. 2011.
         """
         super().__init__(n_components, kernel, **kwargs)
-        self.lambda_ = lambda_ 
+        self.lambda_ = lambda_
         self.mu = mu
         self.gamma_ = gamma_
         self.k_neighbour = k_neighbour
@@ -57,7 +58,7 @@ class TCA(BaseTransformer):
             x = np.vstack((xs, xt))
             ns = xs.shape[0]
             nt = xt.shape[0]
-            L = mmd_coef(ns, nt, kind='marginal', mu=0)
+            L = mmd_coef(ns, nt, kind="marginal", mu=0)
             L[np.isnan(L)] = 0
         else:
             x = xs.copy()
@@ -73,16 +74,16 @@ class TCA(BaseTransformer):
             ys_mat = self._lb.fit_transform(ys)
             n_class = ys_mat.shape[1]
             y = np.zeros((n, n_class))
-            y[:ys_mat.shape[0], :] = ys_mat[:]
+            y[: ys_mat.shape[0], :] = ys_mat[:]
             if yt is not None:
                 yt_mat = self._lb.transform(yt)
-                y[ys_mat.shape[0]:yt_mat.shape[0], :] = yt_mat[:]
+                y[ys_mat.shape[0] : yt_mat.shape[0], :] = yt_mat[:]
             ker_y = self.gamma_ * np.dot(y, y.T) + (1 - self.gamma_) * unit_mat
-            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour, mode='connectivity')
+            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour, mode="connectivity")
             obj += multi_dot([krnl_x, (L + self.mu * lap_mat), krnl_x.T])
             st += multi_dot([krnl_x, ctr_mat, ker_y, ctr_mat, krnl_x.T])
         # obj = np.trace(np.dot(krnl_x,L))
-        else: 
+        else:
             obj += multi_dot([krnl_x, L, krnl_x.T])
 
         # obj_ovr = np.dot(inv(obj), st)

@@ -10,15 +10,26 @@ In Proceedings of the 34th AAAI Conference on Artificial Intelligence (AAAI 2020
 
 import numpy as np
 from numpy.linalg import multi_dot
+
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
-from ..utils import lap_norm, base_init
+from ..utils import base_init, lap_norm
 from .base import BaseFramework
 
 
 class SIDeRSVM(BaseFramework):
-    def __init__(self, C=1.0, kernel='linear', lambda_=1.0, mu=0.0, k_neighbour=3,
-                 manifold_metric='cosine', knn_mode='distance', solver='osqp', **kwargs):
+    def __init__(
+        self,
+        C=1.0,
+        kernel="linear",
+        lambda_=1.0,
+        mu=0.0,
+        k_neighbour=3,
+        manifold_metric="cosine",
+        knn_mode="distance",
+        solver="osqp",
+        **kwargs,
+    ):
         """Side Information Dependence Regularised Support Vector Machine
 
         Parameters
@@ -33,16 +44,16 @@ class SIDeRSVM(BaseFramework):
         mu : float, optional
             param for manifold regularisation, by default 0
         k_neighbour : int, optional
-            number of nearest numbers for each sample in manifold regularisation, 
+            number of nearest numbers for each sample in manifold regularisation,
             by default 3
         manifold_metric : str, optional
-            The distance metric used to calculate the k-Neighbors for each 
-            sample point. The DistanceMetric class gives a list of available 
+            The distance metric used to calculate the k-Neighbors for each
+            sample point. The DistanceMetric class gives a list of available
             metrics. By default 'cosine'.
         knn_mode : str, optional
-            {‘connectivity’, ‘distance’}, by default 'distance'. Type of 
-            returned matrix: ‘connectivity’ will return the connectivity 
-            matrix with ones and zeros, and ‘distance’ will return the 
+            {‘connectivity’, ‘distance’}, by default 'distance'. Type of
+            returned matrix: ‘connectivity’ will return the connectivity
+            matrix with ones and zeros, and ‘distance’ will return the
             distances between neighbors according to the given metric.
         solver : str, optional
             quadratic programming solver, [cvxopt, osqp], by default 'osqp'
@@ -78,9 +89,12 @@ class SIDeRSVM(BaseFramework):
 
         obj_core = unit_mat.copy()  # core objective
         if self.mu != 0:
-            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour, metric=self.manifold_metric, mode=self.knn_mode)
-            obj_core += np.dot(self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat]) / np.square(n - 1)
-                               + self.mu * lap_mat / np.square(n), krnl_x)
+            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour, metric=self.manifold_metric, mode=self.knn_mode,)
+            obj_core += np.dot(
+                self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat]) / np.square(n - 1)
+                + self.mu * lap_mat / np.square(n),
+                krnl_x,
+            )
         else:
             obj_core += self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat, krnl_x]) / np.square(n - 1)
 
@@ -134,8 +148,18 @@ class SIDeRSVM(BaseFramework):
 
 
 class SIDeRLS(BaseFramework):
-    def __init__(self, sigma_=1.0, lambda_=1.0, mu=0.0, kernel='linear', k_neighbour=3, knn_mode='distance',
-                 manifold_metric='cosine', class_weight=None, **kwargs):
+    def __init__(
+        self,
+        sigma_=1.0,
+        lambda_=1.0,
+        mu=0.0,
+        kernel="linear",
+        k_neighbour=3,
+        knn_mode="distance",
+        manifold_metric="cosine",
+        class_weight=None,
+        **kwargs,
+    ):
         """Side Information Dependence Regularised Least Square
 
         Parameters
@@ -149,7 +173,7 @@ class SIDeRLS(BaseFramework):
         kernel : str, optional
             [description], by default 'linear'
         k_neighbour : int, optional
-            number of nearest numbers for each sample in manifold regularisation, 
+            number of nearest numbers for each sample in manifold regularisation,
             by default 3
         knn_mode : str, optional
             {‘connectivity’, ‘distance’}, by default 'distance'. Type of returned matrix: ‘connectivity’ will return
@@ -160,7 +184,7 @@ class SIDeRLS(BaseFramework):
             gives a list of available metrics. By default 'cosine'.
         class_weight : [type], optional
             [description], by default None
-        **kwargs: 
+        **kwargs:
             kernel param
         """
         super().__init__(kernel, k_neighbour, manifold_metric, knn_mode, **kwargs)
@@ -168,7 +192,7 @@ class SIDeRLS(BaseFramework):
         self.lambda_ = lambda_
         self.mu = mu
         self.class_weight = class_weight
-        
+
     def fit(self, x, y, covariates=None):
         """Fit the model according to the given training data.
 
@@ -199,10 +223,14 @@ class SIDeRLS(BaseFramework):
         Q = self.sigma_ * unit_mat
         if self.mu != 0:
             lap_mat = lap_norm(x, n_neighbour=self.k, metric=self.manifold_metric, mode=self.knn_mode)
-            Q += np.dot(J + self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat]) / np.square(n - 1)
-                        + self.mu * lap_mat / np.square(n), krnl_x)
+            Q += np.dot(
+                J
+                + self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat]) / np.square(n - 1)
+                + self.mu * lap_mat / np.square(n),
+                krnl_x,
+            )
         else:
-            Q += np.dot(J + self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat]) / np.square(n - 1), krnl_x)
+            Q += np.dot(J + self.lambda_ * multi_dot([ctr_mat, krnl_c, ctr_mat]) / np.square(n - 1), krnl_x,)
 
         y_transformed = self._lb.fit_transform(y)
         self.coef_ = self._solve_semi_ls(Q, y_transformed)
